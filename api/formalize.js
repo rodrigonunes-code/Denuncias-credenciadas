@@ -36,8 +36,8 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    response.status(503).json({ error: "A IA ainda não foi configurada neste ambiente." });
+  if (!process.env.GEMINI_API_KEY) {
+    response.status(503).json({ error: "A API do Gemini ainda não foi configurada neste ambiente." });
     return;
   }
 
@@ -48,47 +48,65 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
+    const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "x-goog-api-key": process.env.GEMINI_API_KEY,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.5",
-        reasoning: { effort: "low" },
-        text: { verbosity: "medium" },
-        instructions: [
-          "Você é um redator administrativo brasileiro especializado em registros escolares.",
-          "Transforme o relato em um registro formal, claro, impessoal e organizado em formato de ata.",
-          "Preserve rigorosamente todos os fatos informados.",
-          "Não invente nomes, datas, horários, locais, falas, testemunhas, providências, conclusões ou enquadramentos legais.",
-          "Não atenue nem intensifique a gravidade do conteúdo.",
-          "Quando uma informação não tiver sido fornecida, simplesmente a omita.",
-          "Corrija ortografia, concordância e pontuação.",
-          "Entregue somente o texto final em português do Brasil, sem comentários ou blocos Markdown.",
-          "Use o título REGISTRO FORMAL DA DENÚNCIA e parágrafos objetivos."
-        ].join(" "),
-        input: JSON.stringify({
-          escola: typeof school === "string" ? school : "",
-          classificacao: typeof severity === "string" ? severity : "",
-          data_hora_atendimento: typeof receivedAt === "string" ? receivedAt : "",
-          relato_original: report.trim()
-        })
+        system_instruction: {
+          parts: [{
+            text: [
+              "Você é um redator administrativo brasileiro especializado em registros escolares.",
+              "Transforme o relato em um registro formal, claro, impessoal e organizado em formato de ata.",
+              "Preserve rigorosamente todos os fatos informados.",
+              "Não invente nomes, datas, horários, locais, falas, testemunhas, providências, conclusões ou enquadramentos legais.",
+              "Não atenue nem intensifique a gravidade do conteúdo.",
+              "Quando uma informação não tiver sido fornecida, simplesmente a omita.",
+              "Corrija ortografia, concordância e pontuação.",
+              "Entregue somente o texto final em português do Brasil, sem comentários ou blocos Markdown.",
+              "Use o título REGISTRO FORMAL DA DENÚNCIA e parágrafos objetivos."
+            ].join(" ")
+          }]
+        },
+        contents: [{
+          role: "user",
+          parts: [{
+            text: JSON.stringify({
+              escola: typeof school === "string" ? school : "",
+              classificacao: typeof severity === "string" ? severity : "",
+              data_hora_atendimento: typeof receivedAt === "string" ? receivedAt : "",
+              relato_original: report.trim()
+            })
+          }]
+        }],
+        generationConfig: {
+          maxOutputTokens: 1800,
+          thinkingConfig: {
+            thinkingLevel: "low"
+          }
+        }
       })
     });
 
-    const data = await openAiResponse.json();
-    if (!openAiResponse.ok) {
-      console.error("OpenAI API error:", data?.error?.message || openAiResponse.status);
-      response.status(502).json({ error: "A IA não conseguiu processar o relato. Tente novamente." });
+    const data = await geminiResponse.json();
+    if (!geminiResponse.ok) {
+      console.error("Gemini API error:", data?.error?.message || geminiResponse.status);
+      const message = geminiResponse.status === 429
+        ? "O limite gratuito da IA foi atingido. Aguarde e tente novamente."
+        : "A IA não conseguiu processar o relato. Tente novamente.";
+      response.status(502).json({ error: message });
       return;
     }
 
-    const text = data.output_text || (data.output || [])
-      .flatMap((item) => item.content || [])
-      .filter((item) => item.type === "output_text")
+    const text = (data.candidates || [])
+      .flatMap((candidate) => candidate.content?.parts || [])
       .map((item) => item.text)
+      .filter(Boolean)
       .join("\n")
       .trim();
 

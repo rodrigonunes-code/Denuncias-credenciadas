@@ -9,7 +9,7 @@ Sistema web protegido para registrar e acompanhar denúncias recebidas de escola
 - **Firebase Authentication:** acesso por e-mail e senha.
 - **Cloud Firestore:** escolas, denúncias e numeração anual.
 - **Firebase Storage:** fotos e documentos.
-- **OpenAI Responses API:** formalização opcional dos relatos.
+- **Gemini API:** formalização opcional dos relatos.
 
 ## Configuração do Firebase
 
@@ -27,8 +27,8 @@ Sistema web protegido para registrar e acompanhar denúncias recebidas de escola
 Copie os nomes de `.env.example` para os ambientes Production, Preview e Development:
 
 ```text
-OPENAI_API_KEY
-OPENAI_MODEL
+GEMINI_API_KEY
+GEMINI_MODEL
 FIREBASE_API_KEY
 FIREBASE_AUTH_DOMAIN
 FIREBASE_PROJECT_ID
@@ -37,7 +37,7 @@ FIREBASE_MESSAGING_SENDER_ID
 FIREBASE_APP_ID
 ```
 
-`OPENAI_API_KEY` é secreta. Os valores `FIREBASE_*` do aplicativo Web são identificadores públicos, mas ficam centralizados na configuração da Vercel.
+`GEMINI_API_KEY` é secreta. Os valores `FIREBASE_*` do aplicativo Web são identificadores públicos, mas ficam centralizados na configuração da Vercel.
 
 ## Desenvolvimento local
 
@@ -52,13 +52,13 @@ Acesse `http://127.0.0.1:8765`.
 ## Segurança e privacidade
 
 - Usuários anônimos não acessam Firestore nem Storage.
-- A chave da OpenAI fica somente na função serverless.
+- A chave do Gemini fica somente na função serverless.
 - O endpoint da IA valida a sessão do Firebase.
 - Anexos são limitados a 10 MB.
 - A IA é instruída a preservar os fatos e não inventar informações.
 - O texto gerado deve ser revisado antes do registro.
 
-Como os relatos podem conter dados pessoais ou sensíveis, mantenha somente usuários autorizados, revise periodicamente os acessos e configure alertas de orçamento no Google Cloud/Firebase e na OpenAI.
+Como os relatos podem conter dados pessoais ou sensíveis, mantenha somente usuários autorizados e revise periodicamente os acessos. No nível gratuito do Gemini, o conteúdo enviado pode ser usado pelo Google para melhorar seus produtos; evite dados pessoais desnecessários e considere o nível pago para uso institucional real.
 
 ## Recursos
 
