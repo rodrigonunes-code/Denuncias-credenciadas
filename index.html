@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#164e63">
+  <title>Controle de Denúncias Escolares</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="brand-mark auth-brand" aria-hidden="true">CD</div>
+      <p class="eyebrow">ACESSO RESTRITO</p>
+      <h1>Controle de Denúncias</h1>
+      <p>Entre com o e-mail institucional autorizado.</p>
+      <form id="loginForm">
+        <label class="field">
+          <span>E-mail</span>
+          <input type="email" id="loginEmail" required autocomplete="username" placeholder="nome@instituicao.gov.br">
+        </label>
+        <label class="field">
+          <span>Senha</span>
+          <input type="password" id="loginPassword" required autocomplete="current-password" minlength="6">
+        </label>
+        <button type="submit" class="button button-primary full-width" id="loginBtn">Entrar</button>
+        <button type="button" class="text-button auth-help" id="resetPasswordBtn">Esqueci minha senha</button>
+      </form>
+      <div class="auth-status" id="authStatus">Conectando ao ambiente seguro...</div>
+    </div>
+  </section>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">CD</div>
+        <div>
+          <strong>Controle de Denúncias</strong>
+          <span>Escolas credenciadas</span>
+        </div>
+      </div>
+
+      <nav class="main-nav" aria-label="Navegação principal">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">▦</span> Dashboard
+        </button>
+        <button class="nav-item" data-view="nova">
+          <span class="nav-icon">＋</span> Nova denúncia
+        </button>
+        <button class="nav-item" data-view="denuncias">
+          <span class="nav-icon">☷</span> Denúncias
+        </button>
+        <button class="nav-item" data-view="escolas">
+          <span class="nav-icon">⌂</span> Escolas
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="privacy-note">
+          <span aria-hidden="true">●</span>
+          Dados protegidos na nuvem
+        </div>
+        <div class="signed-user" id="signedUser"></div>
+        <button class="button button-ghost full-width" id="logoutBtn">Sair do sistema</button>
+        <button class="button button-ghost full-width" id="backupBtn">Exportar backup</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="menu-button" id="menuButton" aria-label="Abrir menu">☰</button>
+        <div>
+          <p class="eyebrow">GESTÃO E ACOMPANHAMENTO</p>
+          <h1 id="pageTitle">Dashboard</h1>
+        </div>
+        <button class="button button-primary top-action" data-view-target="nova">＋ Registrar denúncia</button>
+      </header>
+
+      <section class="view active" id="view-dashboard">
+        <div class="welcome-panel">
+          <div>
+            <p class="eyebrow light">VISÃO GERAL</p>
+            <h2>Acompanhamento das ocorrências</h2>
+            <p>Indicadores atualizados automaticamente a cada novo registro.</p>
+          </div>
+          <div class="date-badge" id="currentDate"></div>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span class="stat-icon teal">☷</span>
+            <div>
+              <span class="stat-label">Total de denúncias</span>
+              <strong id="statTotal">0</strong>
+              <small id="statMonth">0 neste mês</small>
+            </div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon red">!</span>
+            <div>
+              <span class="stat-label">Denúncias graves</span>
+              <strong id="statGraves">0</strong>
+              <small id="statGravesPercent">0% do total</small>
+            </div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon amber">◷</span>
+            <div>
+              <span class="stat-label">Últimos 30 dias</span>
+              <strong id="statRecentes">0</strong>
+              <small>Registros no período</small>
+            </div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon blue">⌂</span>
+            <div>
+              <span class="stat-label">Escolas com registros</span>
+              <strong id="statEscolas">0</strong>
+              <small id="statEscolasTotal">de 0 credenciadas</small>
+            </div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">RANKING</p>
+                <h3>Escolas com mais denúncias</h3>
+              </div>
+              <button class="text-button" data-view-target="denuncias">Ver registros →</button>
+            </div>
+            <div id="schoolRanking" class="ranking-list empty-slot"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">DISTRIBUIÇÃO</p>
+                <h3>Por gravidade</h3>
+              </div>
+            </div>
+            <div id="severityChart" class="severity-chart empty-slot"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">ATIVIDADE RECENTE</p>
+              <h3>Últimas denúncias registradas</h3>
+            </div>
+            <button class="text-button" data-view-target="denuncias">Ver todas →</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Número</th>
+                  <th>Data e horário</th>
+                  <th>Escola</th>
+                  <th>Gravidade</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="recentTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="view" id="view-nova">
+        <div class="section-intro">
+          <div>
+            <p class="eyebrow">NOVO REGISTRO</p>
+            <h2>Registrar denúncia</h2>
+            <p>Preencha os dados recebidos. A data, o horário e o número serão gerados automaticamente.</p>
+          </div>
+          <div class="auto-number">
+            <span>Próximo número</span>
+            <strong id="nextNumber">001/2026</strong>
+          </div>
+        </div>
+
+        <form id="complaintForm" class="form-panel">
+          <div class="form-section">
+            <div class="form-section-number">1</div>
+            <div class="form-section-content">
+              <h3>Identificação da escola</h3>
+              <p>Selecione uma escola previamente cadastrada no sistema.</p>
+              <label class="field">
+                <span>Escola <b>*</b></span>
+                <select id="schoolSelect" required>
+                  <option value="">Selecione a escola</option>
+                </select>
+              </label>
+              <div class="form-hint">Não encontrou? Cadastre a escola na opção “Escolas” do menu.</div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-number">2</div>
+            <div class="form-section-content">
+              <h3>Relato do ocorrido</h3>
+              <p>Descreva objetivamente as informações recebidas.</p>
+              <div class="field-heading">
+                <label for="reportText">Descrição <b>*</b></label>
+                <button type="button" class="ai-button" id="formalizeAiBtn">
+                  <span aria-hidden="true">✦</span> Formalizar com IA
+                </button>
+              </div>
+              <label class="field">
+                <textarea id="reportText" rows="7" maxlength="5000" required placeholder="Informe o que aconteceu, pessoas envolvidas e demais detalhes relevantes..."></textarea>
+                <span class="field-footer">
+                  <small class="ai-privacy">Ao usar a IA, o texto será enviado à OpenAI. Revise o resultado antes de registrar.</small>
+                  <small><span id="charCount">0</span>/5000 caracteres</small>
+                </span>
+              </label>
+              <div class="ai-result-actions hidden" id="aiResultActions">
+                <span>Texto formalizado pela IA. Confira se todos os fatos foram preservados.</span>
+                <button type="button" class="text-button" id="restoreOriginalBtn">Restaurar texto original</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-number">3</div>
+            <div class="form-section-content">
+              <h3>Classificação de gravidade</h3>
+              <p>Escolha a classificação mais adequada para a ocorrência.</p>
+              <div class="severity-options">
+                <label class="severity-option low">
+                  <input type="radio" name="severity" value="Baixa" required>
+                  <span class="severity-dot"></span>
+                  <span><strong>Baixa gravidade</strong><small>Ocorrência de menor impacto</small></span>
+                </label>
+                <label class="severity-option medium">
+                  <input type="radio" name="severity" value="Média">
+                  <span class="severity-dot"></span>
+                  <span><strong>Média gravidade</strong><small>Requer atenção e acompanhamento</small></span>
+                </label>
+                <label class="severity-option high">
+                  <input type="radio" name="severity" value="Grave">
+                  <span class="severity-dot"></span>
+                  <span><strong>Grave</strong><small>Exige providências prioritárias</small></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-number">4</div>
+            <div class="form-section-content">
+              <h3>Fotos e documentos</h3>
+              <p>Anexe arquivos relacionados à denúncia, se houver.</p>
+              <label class="upload-area" id="uploadArea">
+                <input type="file" id="attachmentInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+                <span class="upload-icon">⇧</span>
+                <strong>Clique para selecionar arquivos</strong>
+                <small>Imagens, PDF, Word, Excel ou texto — até 10 MB por arquivo</small>
+              </label>
+              <div id="attachmentList" class="attachment-list"></div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="button button-secondary" id="clearFormBtn">Limpar formulário</button>
+            <button type="submit" class="button button-primary">Registrar denúncia</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="view" id="view-denuncias">
+        <div class="section-intro">
+          <div>
+            <p class="eyebrow">CONSULTA</p>
+            <h2>Denúncias registradas</h2>
+            <p>Consulte, filtre e visualize os registros salvos.</p>
+          </div>
+          <button class="button button-secondary" id="exportCsvBtn">Exportar CSV</button>
+        </div>
+
+        <div class="filter-panel">
+          <label class="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input type="search" id="searchInput" placeholder="Buscar por número, escola ou relato...">
+          </label>
+          <select id="severityFilter" aria-label="Filtrar por gravidade">
+            <option value="">Todas as gravidades</option>
+            <option value="Grave">Grave</option>
+            <option value="Média">Média gravidade</option>
+            <option value="Baixa">Baixa gravidade</option>
+          </select>
+          <select id="schoolFilter" aria-label="Filtrar por escola">
+            <option value="">Todas as escolas</option>
+          </select>
+        </div>
+
+        <div class="panel list-panel">
+          <div class="list-summary"><strong id="resultCount">0</strong> registros encontrados</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Número</th>
+                  <th>Data e horário</th>
+                  <th>Escola</th>
+                  <th>Gravidade</th>
+                  <th>Anexos</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="complaintsTable"></tbody>
+            </table>
+          </div>
+          <div id="complaintsEmpty" class="empty-state hidden">
+            <span>☷</span>
+            <h3>Nenhuma denúncia encontrada</h3>
+            <p>Registre uma nova denúncia ou altere os filtros da consulta.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-escolas">
+        <div class="section-intro">
+          <div>
+            <p class="eyebrow">PRÉ-LISTA</p>
+            <h2>Escolas credenciadas</h2>
+            <p>Gerencie as escolas disponíveis no formulário de denúncias.</p>
+          </div>
+        </div>
+
+        <div class="school-layout">
+          <form id="schoolForm" class="panel compact-form">
+            <p class="eyebrow">NOVA ESCOLA</p>
+            <h3>Adicionar à lista</h3>
+            <label class="field">
+              <span>Nome da escola <b>*</b></span>
+              <input type="text" id="schoolNameInput" maxlength="120" required placeholder="Ex.: Escola Municipal Central">
+            </label>
+            <button type="submit" class="button button-primary full-width">Adicionar escola</button>
+          </form>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">CADASTRADAS</p>
+                <h3>Lista de escolas</h3>
+              </div>
+              <span class="count-pill" id="schoolCount">0 escolas</span>
+            </div>
+            <div id="schoolsList" class="schools-list"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">DETALHES DA DENÚNCIA</p>
+          <h2 id="modalTitle">Denúncia</h2>
+        </div>
+        <button class="icon-button" id="closeModalBtn" aria-label="Fechar">×</button>
+      </div>
+      <div id="modalContent" class="modal-content"></div>
+      <div class="modal-footer">
+        <button class="button button-danger" id="deleteComplaintBtn">Excluir registro</button>
+        <button class="button button-secondary" id="closeModalFooterBtn">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

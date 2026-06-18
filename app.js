@@ -1,0 +1,808 @@
+import {
+  initializeCloud,
+  observeAuth,
+  login,
+  logout,
+  resetPassword,
+  currentUser,
+  getIdToken,
+  listDocuments,
+  getDocument,
+  createDocument,
+  saveDocument,
+  removeDocument,
+  seedSchoolDocuments,
+  createComplaint,
+  removeComplaint,
+  attachmentUrl
+} from "./firebase-client.js";
+
+const OFFICIAL_SCHOOLS = [
+  "EEI ALGODÃO DOCE (PRIVADA)",
+  "EEI ANJINHOS DA GUARDA ESTÂNCIA (PRIVADA)",
+  "EEI ANJINHOS DA GUARDA ESTÂNCIA, RUA TRAMANDAÍ (PRIVADA)",
+  "EEI ANJINHOS DA GUARDA IGARA (PRIVADA)",
+  "EEI ANJOS E MARMANJOS - FILIAL (PRIVADA)",
+  "EEI AQUARELA (PRIVADA)",
+  "EEI AQUARELA KIDS (PRIVADA)",
+  "EEI ARCA DE NOÉ (PRIVADA)",
+  "EEI ASSABENI (SEM FINS LUCRATIVOS)",
+  "EEI ASSABENI FILIAL (SEM FINS LUCRATIVOS)",
+  "EEI BABY RIO BRANCO (PRIVADA)",
+  "EEI BAMBINO CAMPONES (PRIVADA)",
+  "EEI BRINCANDO COM AS CORES (PRIVADA)",
+  "EEI BRINCANDO E APRENDENDO (PRIVADA)",
+  "EEI CASTELINHO DA ALEGRIA (PRIVADA)",
+  "EEI CASTELO AMARELO (PRIVADA)",
+  "EEI CASTELO ENCANTADO (PRIVADA)",
+  "EEI CLUBINHO DA FÉ (PRIVADA)",
+  "EEI COLORÊ (PRIVADA)",
+  "EEI CORAÇÃO DA MAMÃE (PRIVADA)",
+  "EEI CORAÇÃO DA TIA RÊ MATO GRANDE (PRIVADA)",
+  "EEI CRECHE ANJOS E MARMANJOS RIO BRANCO (PRIVADA)",
+  "EEI CRIANÇA & CIA (PRIVADA)",
+  "EEI CRIANÇA ESPERANÇA (PRIVADA)",
+  "EEI DENTE DE LEITE (PRIVADA)",
+  "EEI DISNEYMANIA (PRIVADA)",
+  "EEI DOCE CRIANÇA (PRIVADA)",
+  "EEI DOCE INOCÊNCIA (PRIVADA)",
+  "EEI ECOAR (PRIVADA)",
+  "EEI ENCANTO DA CRIANÇA (PRIVADA)",
+  "EEI ESPAÇO KIDS TIA MARIA (PRIVADA)",
+  "EEI ETERNO APRENDER (PRIVADA)",
+  "EEI FAZENDO ARTE (PRIVADA)",
+  "EEI FELIZ IDADE (PRIVADA)",
+  "EEI GAIA (PRIVADA)",
+  "EEI GERAÇAO VIDA CENTRO II (SEM FINS LUCRATIVOS)",
+  "EEI GERAÇÃO ESTÂNCIA (SEM FINS LUCRATIVOS)",
+  "EEI GERAÇÃO OLARIA (SEM FINS LUCRATIVOS)",
+  "EEI GERAÇÃO PLANALTO (SEM FINS LUCRATIVOS)",
+  "EEI GERAÇÃO VIDA CENTRO (SEM FINS LUCRATIVOS)",
+  "EEI GERAÇÃO VIDA GUAJUVIRAS (SEM FINS LUCRATIVOS)",
+  "EEI GERAÇÃO VIDA MATHIAS (SEM FINS LUCRATIVOS)",
+  "EEI HORA DO APRENDER (PRIVADA)",
+  "EEI INSTITUTO ANJOS E MARMANJOS FÁTIMA (SEM FINS LUCRATIVOS)",
+  "EEI JEITINHO DE ANJO (PRIVADA)",
+  "EEI JEITO INOCENTE (PRIVADA)",
+  "EEI MARTINHO LUTERO (SEM FINS LUCRATIVOS)",
+  "EEI MEU MUNDO BABY KIDS (PRIVADA)",
+  "EEI MIMI MIAU (PRIVADA)",
+  "EEI MUNDO INOCENTE HARMONIA (PRIVADA)",
+  "EEI MUNDO INOCENTE NITERÓI (PRIVADA)",
+  "EEI PARAÍSO ENCANTADO DA CRIANÇA (PRIVADA)",
+  "EEI PEQUENINOS (PRIVADA)",
+  "EEI PEQUENOS CRIADORES (PRIVADA)",
+  "EEI PIMPOLINHOS (HARMONIA)",
+  "EEI PINGO DE GENTE SÃO JOSÉ (PRIVADA)",
+  "EEI PINGUINHO DE GENTE KAISER (PRIVADA)",
+  "EEI PINOQUIO (SEM FINS LUCRATIVOS)",
+  "EEI PINÓQUIO - PRAÇA AMÉRICA (SEM FINS LUCRATIVOS)",
+  "EEI PIQUE ESCONDE (PRIVADA)",
+  "EEI POR AMOR (SEM FINS LUCRATIVOS)",
+  "EEI POR AMOR FILIAL (SEM FINS LUCRATIVOS)",
+  "EEI PUFF (PRIVADA)",
+  "EEI RAIO DE LUZ (PRIVADA)",
+  "EEI RECANTO DOS PICORRUCHOS (PRIVADA)",
+  "EEI REINO ENCANTADO (PRIVADA)",
+  "EEI RISKA E RABISKA CENTRO (PRIVADA)",
+  "EEI RISKA E RABISKA NITEROI (PRIVADA)",
+  "EEI SANTA CRUZ (SEM FINS LUCRATIVOS)",
+  "EEI SEJA FELIZ (PRIVADA)",
+  "EEI SEJA FELIZ 2 (PRIVADA)",
+  "EEI SEMEAR (PRIVADA)",
+  "EEI SÃO JOSÉ (SEM FINS LUCRATIVOS)",
+  "EEI SÃO MATHEUS (SEM FINS LUCRATIVOS)",
+  "EEI TAZMANIA (PRIVADA)",
+  "EEI TIA NECA GUAJUVIRAS (PRIVADA)",
+  "EEI TURMINHA FELIZ I (PRIVADA)",
+  "EEI TURMINHA FELIZ II (PRIVADA)",
+  "EEI UM SONHO DE CRIANÇA (PRIVADA)",
+  "EEI URSINHOS CARINHOSOS (PRIVADA)",
+  "EEI VITÓRIA (PRIVADA)",
+  "EEI VÓ MARIA (SEM FINS LUCRATIVOS)",
+  "EEI ÊXITO (SEM FINS LUCRATIVOS)"
+];
+
+let complaints = [];
+let schools = [];
+let selectedFiles = [];
+let activeComplaintId = null;
+let toastTimer;
+let originalReportBeforeAi = "";
+let eventsBound = false;
+
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+
+document.addEventListener("DOMContentLoaded", init);
+
+async function init() {
+  try {
+    bindEvents();
+    await initializeCloud();
+    $("#authStatus").textContent = "Informe suas credenciais.";
+    observeAuth(async (user) => {
+      if (!user) {
+        complaints = [];
+        schools = [];
+        $("#authScreen").classList.remove("authenticated");
+        $("#signedUser").textContent = "";
+        return;
+      }
+
+      $("#authScreen").classList.add("authenticated");
+      $("#signedUser").textContent = user.email || "Usuário autenticado";
+      $("#authStatus").textContent = "";
+      await seedSchools();
+      await refreshData();
+      updateCurrentDate();
+      await updateNextNumber();
+      renderAll();
+    });
+  } catch (error) {
+    console.error(error);
+    $("#authStatus").textContent = error.message || "Não foi possível conectar ao ambiente em nuvem.";
+    $("#authStatus").classList.add("error");
+  }
+}
+
+async function seedSchools() {
+  await seedSchoolDocuments(OFFICIAL_SCHOOLS);
+}
+
+async function refreshData() {
+  [complaints, schools] = await Promise.all([
+    listDocuments("complaints"),
+    listDocuments("schools")
+  ]);
+  complaints.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  schools.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+}
+
+function bindEvents() {
+  if (eventsBound) return;
+  eventsBound = true;
+
+  $("#loginForm").addEventListener("submit", handleLogin);
+  $("#resetPasswordBtn").addEventListener("click", handlePasswordReset);
+  $("#logoutBtn").addEventListener("click", () => logout());
+  $$(".nav-item").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+
+  $$("[data-view-target]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.viewTarget));
+  });
+
+  $("#menuButton").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+  $("#complaintForm").addEventListener("submit", submitComplaint);
+  $("#schoolForm").addEventListener("submit", submitSchool);
+  $("#reportText").addEventListener("input", updateCharCount);
+  $("#formalizeAiBtn").addEventListener("click", formalizeReportWithAi);
+  $("#restoreOriginalBtn").addEventListener("click", restoreOriginalReport);
+  $("#attachmentInput").addEventListener("change", (event) => addFiles(event.target.files));
+  $("#clearFormBtn").addEventListener("click", clearComplaintForm);
+  $("#searchInput").addEventListener("input", renderComplaintsList);
+  $("#severityFilter").addEventListener("change", renderComplaintsList);
+  $("#schoolFilter").addEventListener("change", renderComplaintsList);
+  $("#exportCsvBtn").addEventListener("click", exportCsv);
+  $("#backupBtn").addEventListener("click", exportBackup);
+  $("#closeModalBtn").addEventListener("click", closeModal);
+  $("#closeModalFooterBtn").addEventListener("click", closeModal);
+  $("#deleteComplaintBtn").addEventListener("click", deleteActiveComplaint);
+  $("#detailModal").addEventListener("click", (event) => {
+    if (event.target === $("#detailModal")) closeModal();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeModal();
+  });
+
+  const uploadArea = $("#uploadArea");
+  ["dragenter", "dragover"].forEach((eventName) => {
+    uploadArea.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadArea.classList.add("dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((eventName) => {
+    uploadArea.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      uploadArea.classList.remove("dragover");
+    });
+  });
+  uploadArea.addEventListener("drop", (event) => addFiles(event.dataTransfer.files));
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  const button = $("#loginBtn");
+  const email = $("#loginEmail").value.trim();
+  const password = $("#loginPassword").value;
+  button.disabled = true;
+  $("#authStatus").classList.remove("error");
+  $("#authStatus").textContent = "Verificando credenciais...";
+  try {
+    await login(email, password);
+    $("#loginForm").reset();
+  } catch (error) {
+    console.error(error);
+    $("#authStatus").textContent = authErrorMessage(error);
+    $("#authStatus").classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function handlePasswordReset() {
+  const email = $("#loginEmail").value.trim();
+  if (!email) {
+    $("#authStatus").textContent = "Informe o e-mail para receber a redefinição de senha.";
+    $("#authStatus").classList.add("error");
+    return;
+  }
+  try {
+    await resetPassword(email);
+    $("#authStatus").classList.remove("error");
+    $("#authStatus").textContent = "E-mail de redefinição enviado.";
+  } catch (error) {
+    $("#authStatus").textContent = authErrorMessage(error);
+    $("#authStatus").classList.add("error");
+  }
+}
+
+function switchView(viewName) {
+  const titles = {
+    dashboard: "Dashboard",
+    nova: "Nova denúncia",
+    denuncias: "Denúncias",
+    escolas: "Escolas credenciadas"
+  };
+
+  $$(".view").forEach((view) => view.classList.remove("active"));
+  $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === viewName));
+  $(`#view-${viewName}`).classList.add("active");
+  $("#pageTitle").textContent = titles[viewName];
+  $("#sidebar").classList.remove("open");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  if (viewName === "nova") updateNextNumber();
+  if (viewName === "denuncias") renderComplaintsList();
+}
+
+function updateCurrentDate() {
+  $("#currentDate").textContent = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  }).format(new Date());
+}
+
+async function getNextComplaintNumber() {
+  const year = new Date().getFullYear();
+  const next = Math.max(0, ...complaints.filter((item) => item.year === year).map((item) => item.sequence || 0)) + 1;
+  return {
+    number: `${String(next).padStart(3, "0")}/${year}`,
+    sequence: next,
+    year
+  };
+}
+
+async function updateNextNumber() {
+  const next = await getNextComplaintNumber();
+  $("#nextNumber").textContent = next.number;
+}
+
+async function submitComplaint(event) {
+  event.preventDefault();
+  const schoolId = $("#schoolSelect").value;
+  const severity = document.querySelector('input[name="severity"]:checked')?.value;
+  const report = $("#reportText").value.trim();
+  const school = schools.find((item) => item.id === schoolId);
+
+  if (!school || !severity || !report) {
+    showToast("Preencha os campos obrigatórios.", true);
+    return;
+  }
+
+  try {
+    const number = await createComplaint({
+      schoolId,
+      schoolName: school.name,
+      severity,
+      report,
+      files: selectedFiles
+    });
+    await refreshData();
+    clearComplaintForm(false);
+    renderAll();
+    showToast(`Denúncia ${number} registrada com sucesso.`);
+    switchView("denuncias");
+  } catch (error) {
+    console.error(error);
+    showToast("Erro ao salvar a denúncia. Verifique o espaço disponível.", true);
+  }
+}
+
+function clearComplaintForm(confirmClear = true) {
+  const hasContent = $("#schoolSelect").value || $("#reportText").value || selectedFiles.length;
+  if (confirmClear && hasContent && !window.confirm("Deseja limpar os dados preenchidos?")) return;
+  $("#complaintForm").reset();
+  selectedFiles = [];
+  originalReportBeforeAi = "";
+  $("#aiResultActions").classList.add("hidden");
+  updateCharCount();
+  renderSelectedFiles();
+}
+
+function updateCharCount() {
+  $("#charCount").textContent = $("#reportText").value.length;
+}
+
+async function formalizeReportWithAi() {
+  const reportField = $("#reportText");
+  const button = $("#formalizeAiBtn");
+  const report = reportField.value.trim();
+  const schoolId = $("#schoolSelect").value;
+  const school = schools.find((item) => item.id === schoolId);
+  const severity = document.querySelector('input[name="severity"]:checked')?.value || "";
+
+  if (report.length < 20) {
+    showToast("Digite um relato com pelo menos 20 caracteres antes de usar a IA.", true);
+    reportField.focus();
+    return;
+  }
+
+  originalReportBeforeAi = reportField.value;
+  button.disabled = true;
+  button.innerHTML = '<span aria-hidden="true">◌</span> Formalizando...';
+
+  try {
+    const token = await getIdToken();
+    const response = await fetch("/api/formalize", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        report,
+        school: school?.name || "",
+        severity,
+        receivedAt: new Date().toISOString()
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || "Não foi possível formalizar o relato.");
+    }
+
+    reportField.value = data.text;
+    updateCharCount();
+    $("#aiResultActions").classList.remove("hidden");
+    showToast("Relato formalizado. Revise o texto antes de registrar.");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Erro ao acessar o serviço de IA.", true);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<span aria-hidden="true">✦</span> Formalizar com IA';
+  }
+}
+
+function restoreOriginalReport() {
+  if (!originalReportBeforeAi) return;
+  $("#reportText").value = originalReportBeforeAi;
+  originalReportBeforeAi = "";
+  $("#aiResultActions").classList.add("hidden");
+  updateCharCount();
+  showToast("Texto original restaurado.");
+}
+
+function addFiles(fileList) {
+  const incoming = [...fileList];
+  const oversized = incoming.filter((file) => file.size > 10 * 1024 * 1024);
+  const accepted = incoming.filter((file) => file.size <= 10 * 1024 * 1024);
+
+  if (oversized.length) {
+    showToast(`${oversized.length} arquivo(s) excedem o limite de 10 MB.`, true);
+  }
+
+  accepted.forEach((file) => {
+    const duplicate = selectedFiles.some((item) => item.name === file.name && item.size === file.size);
+    if (!duplicate) selectedFiles.push(file);
+  });
+  $("#attachmentInput").value = "";
+  renderSelectedFiles();
+}
+
+function renderSelectedFiles() {
+  $("#attachmentList").innerHTML = selectedFiles.map((file, index) => `
+    <div class="attachment-item">
+      <span aria-hidden="true">▧</span>
+      <div class="file-info">
+        <strong>${escapeHtml(file.name)}</strong>
+        <small>${formatFileSize(file.size)}</small>
+      </div>
+      <button type="button" class="remove-file" data-file-index="${index}" aria-label="Remover arquivo">×</button>
+    </div>
+  `).join("");
+
+  $$("[data-file-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedFiles.splice(Number(button.dataset.fileIndex), 1);
+      renderSelectedFiles();
+    });
+  });
+}
+
+async function submitSchool(event) {
+  event.preventDefault();
+  const input = $("#schoolNameInput");
+  const name = input.value.trim();
+  if (!name) return;
+
+  if (schools.some((school) => school.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
+    showToast("Essa escola já está cadastrada.", true);
+    return;
+  }
+
+  await createDocument("schools", {
+    name,
+    source: "manual",
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser()?.uid || null
+  });
+  input.value = "";
+  await refreshData();
+  renderAll();
+  showToast("Escola adicionada à lista.");
+}
+
+async function removeSchool(id) {
+  const school = schools.find((item) => item.id === id);
+  const linked = complaints.filter((complaint) => complaint.schoolId === id).length;
+  if (!school) return;
+
+  if (linked) {
+    showToast(`A escola possui ${linked} denúncia(s) vinculada(s) e não pode ser excluída.`, true);
+    return;
+  }
+
+  if (!window.confirm(`Excluir "${school.name}" da lista?`)) return;
+  await removeDocument("schools", id);
+  await refreshData();
+  renderAll();
+  showToast("Escola removida.");
+}
+
+function renderAll() {
+  renderSchoolOptions();
+  renderSchools();
+  renderDashboard();
+  renderComplaintsList();
+  updateNextNumber();
+}
+
+function renderSchoolOptions() {
+  const complaintValue = $("#schoolSelect").value;
+  const filterValue = $("#schoolFilter").value;
+  const options = schools.map((school) => `<option value="${school.id}">${escapeHtml(school.name)}</option>`).join("");
+  $("#schoolSelect").innerHTML = `<option value="">Selecione a escola</option>${options}`;
+  $("#schoolFilter").innerHTML = `<option value="">Todas as escolas</option>${options}`;
+  $("#schoolSelect").value = complaintValue;
+  $("#schoolFilter").value = filterValue;
+}
+
+function renderSchools() {
+  $("#schoolCount").textContent = `${schools.length} ${schools.length === 1 ? "escola" : "escolas"}`;
+  $("#schoolsList").innerHTML = schools.map((school) => {
+    const total = complaints.filter((complaint) => complaint.schoolId === school.id).length;
+    return `
+      <div class="school-row">
+        <span class="school-avatar">E</span>
+        <div class="school-info">
+          <strong>${escapeHtml(school.name)}</strong>
+          <small>${total} ${total === 1 ? "denúncia registrada" : "denúncias registradas"}</small>
+        </div>
+        <button class="school-delete" data-school-delete="${school.id}">Excluir</button>
+      </div>
+    `;
+  }).join("");
+
+  $$("[data-school-delete]").forEach((button) => {
+    button.addEventListener("click", () => removeSchool(button.dataset.schoolDelete));
+  });
+}
+
+function renderDashboard() {
+  const now = new Date();
+  const currentMonth = complaints.filter((item) => {
+    const date = new Date(item.createdAt);
+    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  }).length;
+  const graves = complaints.filter((item) => item.severity === "Grave").length;
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recent = complaints.filter((item) => new Date(item.createdAt) >= thirtyDaysAgo).length;
+  const schoolsWithComplaints = new Set(complaints.map((item) => item.schoolId)).size;
+
+  $("#statTotal").textContent = complaints.length;
+  $("#statMonth").textContent = `${currentMonth} neste mês`;
+  $("#statGraves").textContent = graves;
+  $("#statGravesPercent").textContent = `${complaints.length ? Math.round((graves / complaints.length) * 100) : 0}% do total`;
+  $("#statRecentes").textContent = recent;
+  $("#statEscolas").textContent = schoolsWithComplaints;
+  $("#statEscolasTotal").textContent = `de ${schools.length} credenciadas`;
+
+  renderSchoolRanking();
+  renderSeverityChart();
+  renderRecentTable();
+}
+
+function renderSchoolRanking() {
+  const totals = new Map();
+  complaints.forEach((item) => totals.set(item.schoolName, (totals.get(item.schoolName) || 0) + 1));
+  const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const max = ranking[0]?.[1] || 1;
+
+  $("#schoolRanking").innerHTML = ranking.map(([name, total], index) => `
+    <div class="ranking-item">
+      <span class="rank-number">${index + 1}</span>
+      <span class="ranking-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(total / max) * 100}%"></div></div>
+      <span class="ranking-total">${total} ${total === 1 ? "reg." : "regs."}</span>
+    </div>
+  `).join("");
+}
+
+function renderSeverityChart() {
+  const severities = [
+    { name: "Grave", className: "high" },
+    { name: "Média", className: "medium" },
+    { name: "Baixa", className: "low" }
+  ];
+  const max = Math.max(1, ...severities.map((item) => complaints.filter((c) => c.severity === item.name).length));
+
+  if (!complaints.length) {
+    $("#severityChart").innerHTML = "";
+    return;
+  }
+
+  $("#severityChart").innerHTML = severities.map((item) => {
+    const total = complaints.filter((complaint) => complaint.severity === item.name).length;
+    return `
+      <div class="severity-row ${item.className}">
+        <span class="label">${item.name}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${(total / max) * 100}%"></div></div>
+        <span class="value">${total}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderRecentTable() {
+  const rows = complaints.slice(0, 5);
+  $("#recentTable").innerHTML = rows.length ? rows.map(complaintRow).join("") : emptyTableRow(5);
+  bindDetailButtons();
+}
+
+function renderComplaintsList() {
+  const search = normalize($("#searchInput").value);
+  const severity = $("#severityFilter").value;
+  const schoolId = $("#schoolFilter").value;
+
+  const filtered = complaints.filter((item) => {
+    const matchesSearch = !search || normalize(`${item.number} ${item.schoolName} ${item.report}`).includes(search);
+    const matchesSeverity = !severity || item.severity === severity;
+    const matchesSchool = !schoolId || item.schoolId === schoolId;
+    return matchesSearch && matchesSeverity && matchesSchool;
+  });
+
+  $("#resultCount").textContent = filtered.length;
+  $("#complaintsTable").innerHTML = filtered.map((item) => complaintRow(item, true)).join("");
+  $("#complaintsEmpty").classList.toggle("hidden", filtered.length > 0);
+  bindDetailButtons();
+}
+
+function complaintRow(item, includeAttachments = false) {
+  return `
+    <tr>
+      <td><button class="number-link" data-detail-id="${item.id}">${escapeHtml(item.number)}</button></td>
+      <td>${formatDateTime(item.createdAt)}</td>
+      <td>${escapeHtml(item.schoolName)}</td>
+      <td>${severityBadge(item.severity)}</td>
+      ${includeAttachments ? `<td>${item.attachments?.length || 0}</td>` : ""}
+      <td><button class="text-button" data-detail-id="${item.id}">Detalhes →</button></td>
+    </tr>
+  `;
+}
+
+function emptyTableRow(columns) {
+  return `<tr><td colspan="${columns}" style="text-align:center;color:#8a9aa2;padding:28px">Nenhum registro até o momento.</td></tr>`;
+}
+
+function bindDetailButtons() {
+  $$("[data-detail-id]").forEach((button) => {
+    button.addEventListener("click", () => openComplaintDetail(button.dataset.detailId));
+  });
+}
+
+function openComplaintDetail(id) {
+  const complaint = complaints.find((item) => item.id === id);
+  if (!complaint) return;
+  activeComplaintId = id;
+  $("#modalTitle").textContent = `Denúncia ${complaint.number}`;
+
+  const attachments = complaint.attachments || [];
+  $("#modalContent").innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-card"><span>Escola</span><strong>${escapeHtml(complaint.schoolName)}</strong></div>
+      <div class="detail-card"><span>Data e horário</span><strong>${formatDateTime(complaint.createdAt)}</strong></div>
+      <div class="detail-card"><span>Classificação</span><strong>${severityBadge(complaint.severity)}</strong></div>
+      <div class="detail-card"><span>Anexos</span><strong>${attachments.length}</strong></div>
+    </div>
+    <div class="report-box">
+      <h3>Relato do ocorrido</h3>
+      <p>${escapeHtml(complaint.report)}</p>
+    </div>
+    <div class="modal-attachments">
+      <h3>Fotos e documentos</h3>
+      ${attachments.length ? attachments.map((file, index) => `
+        <div class="attachment-download">
+          <span>▧ ${escapeHtml(file.name)} (${formatFileSize(file.size)})</span>
+          <a href="#" data-download-index="${index}">Baixar arquivo</a>
+        </div>
+      `).join("") : '<p style="color:#82939b;font-size:11px">Nenhum arquivo anexado.</p>'}
+    </div>
+  `;
+
+  $$("[data-download-index]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      downloadAttachment(attachments[Number(link.dataset.downloadIndex)]);
+    });
+  });
+  $("#detailModal").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeModal() {
+  $("#detailModal").classList.add("hidden");
+  document.body.style.overflow = "";
+  activeComplaintId = null;
+}
+
+async function deleteActiveComplaint() {
+  if (!activeComplaintId) return;
+  const complaint = complaints.find((item) => item.id === activeComplaintId);
+  if (!complaint || !window.confirm(`Excluir definitivamente a denúncia ${complaint.number}?`)) return;
+
+  await removeComplaint(complaint);
+  closeModal();
+  await refreshData();
+  renderAll();
+  showToast("Denúncia excluída.");
+}
+
+async function downloadAttachment(file) {
+  const url = await attachmentUrl(file.path);
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function exportCsv() {
+  if (!complaints.length) {
+    showToast("Não há denúncias para exportar.", true);
+    return;
+  }
+
+  const header = ["Número", "Data e horário", "Escola", "Gravidade", "Relato", "Quantidade de anexos"];
+  const rows = complaints.map((item) => [
+    item.number,
+    formatDateTime(item.createdAt),
+    item.schoolName,
+    item.severity,
+    item.report,
+    item.attachments?.length || 0
+  ]);
+  const csv = [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
+  downloadBlob(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }), `denuncias-${dateStamp()}.csv`);
+  showToast("Planilha CSV exportada.");
+}
+
+async function exportBackup() {
+  const backup = {
+    application: "Controle de Denúncias Escolares",
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    schools,
+    complaints,
+    note: "Os documentos permanecem protegidos no Firebase Storage e são referenciados pelo campo path."
+  };
+  downloadBlob(
+    new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }),
+    `backup-denuncias-${dateStamp()}.json`
+  );
+  showToast("Backup exportado com sucesso.");
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function severityBadge(severity) {
+  const className = severity === "Grave" ? "grave" : severity === "Média" ? "media" : "baixa";
+  const label = severity === "Média" ? "Média gravidade" : severity === "Baixa" ? "Baixa gravidade" : "Grave";
+  return `<span class="severity-badge ${className}">${label}</span>`;
+}
+
+function formatDateTime(value) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function formatFileSize(bytes = 0) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalize(value = "") {
+  return value.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function dateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function showToast(message, isError = false) {
+  clearTimeout(toastTimer);
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.classList.toggle("error", isError);
+  toast.classList.add("show");
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 3400);
+}
+
+function authErrorMessage(error) {
+  const code = error?.code || "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) {
+    return "E-mail ou senha inválidos.";
+  }
+  if (code.includes("too-many-requests")) return "Muitas tentativas. Aguarde alguns minutos.";
+  if (code.includes("invalid-email")) return "Informe um endereço de e-mail válido.";
+  if (code.includes("network-request-failed")) return "Falha de conexão. Verifique a internet.";
+  return error?.message || "Não foi possível concluir a autenticação.";
+}
