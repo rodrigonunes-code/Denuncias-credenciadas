@@ -538,7 +538,7 @@ function renderSeverityChart() {
 
 function renderRecentTable() {
   const rows = complaints.slice(0, 5);
-  $("#recentTable").innerHTML = rows.length ? rows.map(complaintRow).join("") : emptyTableRow(5);
+  $("#recentTable").innerHTML = rows.length ? rows.map(complaintRow).join("") : emptyTableRow(6);
   bindDetailButtons();
 }
 
@@ -567,6 +567,7 @@ function complaintRow(item) {
       <td>${formatDateTime(item.createdAt)}</td>
       <td>${escapeHtml(item.schoolName)}</td>
       <td>${severityBadge(item.severity)}</td>
+      <td>${escapeHtml(complaintAuthor(item))}</td>
       <td>
         <div class="table-actions">
           <button class="text-button" data-detail-id="${item.id}">Detalhes →</button>
@@ -704,6 +705,7 @@ function printComplaint(id) {
         <p><span class="label">Número da denúncia:</span> ${escapeHtml(complaint.number)}</p>
         <p><span class="label">Escola:</span> ${escapeHtml(complaint.schoolName)}</p>
         <p><span class="label">Data e horário do atendimento:</span> ${escapeHtml(formatDateTime(complaint.createdAt))}</p>
+        <p><span class="label">Registrado por:</span> ${escapeHtml(complaintAuthor(complaint))}</p>
       </section>
       <p class="report">${escapeHtml(narrative)}</p>
       <section class="signatures">
@@ -752,6 +754,7 @@ function openComplaintDetail(id) {
       <div class="detail-card"><span>Escola</span><strong>${escapeHtml(complaint.schoolName)}</strong></div>
       <div class="detail-card"><span>Data e horário</span><strong>${formatDateTime(complaint.createdAt)}</strong></div>
       <div class="detail-card"><span>Classificação</span><strong>${severityBadge(complaint.severity)}</strong></div>
+      <div class="detail-card"><span>Registrado por</span><strong>${escapeHtml(complaintAuthor(complaint))}</strong></div>
     </div>
     <div class="report-box">
       <h3>Relato do ocorrido</h3>
@@ -786,12 +789,13 @@ function exportCsv() {
     return;
   }
 
-  const header = ["Número", "Data e horário", "Escola", "Gravidade", "Relato"];
+  const header = ["Número", "Data e horário", "Escola", "Gravidade", "Registrado por", "Relato"];
   const rows = complaints.map((item) => [
     item.number,
     formatDateTime(item.createdAt),
     item.schoolName,
     item.severity,
+    complaintAuthor(item),
     item.report
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
@@ -829,6 +833,10 @@ function severityBadge(severity) {
   const className = severity === "Grave" ? "grave" : severity === "Média" ? "media" : "baixa";
   const label = severity === "Média" ? "Média gravidade" : severity === "Baixa" ? "Baixa gravidade" : "Grave";
   return `<span class="severity-badge ${className}">${label}</span>`;
+}
+
+function complaintAuthor(complaint) {
+  return complaint.createdByEmail || complaint.createdByName || "Não identificado";
 }
 
 function formatDateTime(value) {

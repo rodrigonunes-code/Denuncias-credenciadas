@@ -126,6 +126,7 @@ export async function createComplaint({ schoolId, schoolName, severity, report }
         report,
         createdAt: serverTimestamp(),
         createdBy: auth.currentUser?.uid || null,
+        createdByName: auth.currentUser?.displayName || null,
         createdByEmail: auth.currentUser?.email || null
       });
     return number;
