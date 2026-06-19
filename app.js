@@ -189,6 +189,7 @@ function bindEvents() {
   $("#backupBtn").addEventListener("click", exportBackup);
   $("#closeModalBtn").addEventListener("click", closeModal);
   $("#closeModalFooterBtn").addEventListener("click", closeModal);
+  $("#printComplaintBtn").addEventListener("click", () => printComplaint(activeComplaintId));
   $("#deleteComplaintBtn").addEventListener("click", deleteActiveComplaint);
   $("#detailModal").addEventListener("click", (event) => {
     if (event.target === $("#detailModal")) closeModal();
@@ -614,7 +615,12 @@ function complaintRow(item, includeAttachments = false) {
       <td>${escapeHtml(item.schoolName)}</td>
       <td>${severityBadge(item.severity)}</td>
       ${includeAttachments ? `<td>${item.attachments?.length || 0}</td>` : ""}
-      <td><button class="text-button" data-detail-id="${item.id}">Detalhes →</button></td>
+      <td>
+        <div class="table-actions">
+          <button class="text-button" data-detail-id="${item.id}">Detalhes →</button>
+          <button class="text-button print-link" data-print-id="${item.id}">Imprimir</button>
+        </div>
+      </td>
     </tr>
   `;
 }
@@ -627,6 +633,160 @@ function bindDetailButtons() {
   $$("[data-detail-id]").forEach((button) => {
     button.addEventListener("click", () => openComplaintDetail(button.dataset.detailId));
   });
+  $$("[data-print-id]").forEach((button) => {
+    button.addEventListener("click", () => printComplaint(button.dataset.printId));
+  });
+}
+
+function printComplaint(id) {
+  const complaint = complaints.find((item) => item.id === id);
+  if (!complaint) {
+    showToast("Registro não encontrado para impressão.", true);
+    return;
+  }
+
+  const narrative = extractNarrativeForPrint(complaint.report);
+  const printedAt = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date());
+  const printWindow = window.open("", "_blank");
+
+  if (!printWindow) {
+    showToast("Permita pop-ups no navegador para imprimir o registro.", true);
+    return;
+  }
+
+  printWindow.document.write(`<!DOCTYPE html>
+  <html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denúncia ${escapeHtml(complaint.number)}</title>
+    <style>
+      @page {
+        size: A4 portrait;
+        margin: 20mm 18mm 18mm;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: #111;
+        background: #fff;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 12pt;
+        line-height: 1.55;
+      }
+      .document {
+        width: 100%;
+        min-height: 257mm;
+        display: flex;
+        flex-direction: column;
+      }
+      h1 {
+        margin: 0 0 20pt;
+        font-size: 15pt;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+      .identification {
+        margin-bottom: 20pt;
+        border-top: 1px solid #222;
+        border-bottom: 1px solid #222;
+        padding: 10pt 0;
+      }
+      .identification p {
+        margin: 2pt 0;
+      }
+      .label { font-weight: 700; }
+      .report {
+        margin: 0;
+        text-align: justify;
+        text-indent: 1.25cm;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .signatures {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 32pt;
+        margin-top: auto;
+        padding-top: 55pt;
+        break-inside: avoid;
+      }
+      .signature {
+        padding-top: 7pt;
+        border-top: 1px solid #111;
+        text-align: center;
+        font-size: 10.5pt;
+      }
+      .footer {
+        margin-top: 22pt;
+        color: #555;
+        font-size: 8pt;
+        text-align: center;
+      }
+      @media screen {
+        body { background: #e9edef; }
+        .document {
+          width: 210mm;
+          margin: 20px auto;
+          padding: 20mm 18mm 18mm;
+          background: white;
+          box-shadow: 0 4px 24px rgba(0,0,0,.14);
+        }
+      }
+      @media print {
+        .document { min-height: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="document">
+      <h1>Registro Formal de Denúncia</h1>
+      <section class="identification">
+        <p><span class="label">Número da denúncia:</span> ${escapeHtml(complaint.number)}</p>
+        <p><span class="label">Escola:</span> ${escapeHtml(complaint.schoolName)}</p>
+        <p><span class="label">Data e horário do atendimento:</span> ${escapeHtml(formatDateTime(complaint.createdAt))}</p>
+      </section>
+      <p class="report">${escapeHtml(narrative)}</p>
+      <section class="signatures">
+        <div class="signature">Assinatura do(a) Fiscal</div>
+        <div class="signature">Assinatura do(a) Responsável</div>
+      </section>
+      <div class="footer">Documento emitido pelo Controle de Denúncias em ${escapeHtml(printedAt)}.</div>
+    </main>
+    <script>
+      window.addEventListener("load", () => {
+        window.focus();
+        setTimeout(() => window.print(), 250);
+      });
+    <\/script>
+  </body>
+  </html>`);
+  printWindow.document.close();
+}
+
+function extractNarrativeForPrint(report = "") {
+  const lines = String(report).split(/\r?\n/).map((line) => line.trim());
+  const ignoredPatterns = [
+    /^REGISTRO FORMAL (DA|DE) DENÚNCIA$/i,
+    /^Escola:/i,
+    /^Data e horário do atendimento:/i,
+    /^_+$/,
+    /^Assinatura do\(a\) Fiscal$/i,
+    /^Assinatura do\(a\) Responsável$/i
+  ];
+  return lines
+    .filter(Boolean)
+    .filter((line) => !ignoredPatterns.some((pattern) => pattern.test(line)))
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function openComplaintDetail(id) {

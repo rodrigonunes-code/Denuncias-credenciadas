@@ -409,6 +409,17 @@ button {
   font-weight: 700;
 }
 
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.print-link {
+  color: #415d69;
+}
+
 .ranking-list {
   display: grid;
   gap: 17px;
@@ -1175,6 +1186,11 @@ textarea:focus {
   border-top: 1px solid var(--line);
 }
 
+.modal-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1382,6 +1398,16 @@ textarea:focus {
 
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .modal-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .field-heading,
