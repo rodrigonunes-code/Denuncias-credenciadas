@@ -12,7 +12,7 @@ async function validateFirebaseToken(request) {
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (!token || !process.env.FIREBASE_API_KEY) return false;
 
-  const response = await fetch(
+  const firebaseResponse = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(process.env.FIREBASE_API_KEY)}`,
     {
       method: "POST",
@@ -20,9 +20,47 @@ async function validateFirebaseToken(request) {
       body: JSON.stringify({ idToken: token })
     }
   );
-  if (!response.ok) return false;
-  const data = await response.json();
+
+  if (!firebaseResponse.ok) return false;
+  const data = await firebaseResponse.json();
   return Boolean(data.users?.[0]?.localId);
+}
+
+function normalizeNarrative(value = "") {
+  return value
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-z]*/gi, "").replace(/```/g, ""))
+    .replace(/^#+\s*/gm, "")
+    .replace(/^\s*(REGISTRO FORMAL (DA|DE) DENÚNCIA|RELATO|ATA)\s*:?\s*/gim, "")
+    .replace(/\s*\n+\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function formatAttendanceDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "não informados";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date).replace(",", " às");
+}
+
+function buildFormalRecord({ narrative, school, receivedAt }) {
+  return [
+    "REGISTRO FORMAL DE DENÚNCIA",
+    `Escola: ${String(school || "não informada").trim()}`,
+    `Data e horário do atendimento: ${formatAttendanceDate(receivedAt)}`,
+    narrative,
+    "",
+    "________________________________________",
+    "Assinatura do(a) Fiscal",
+    "",
+    "________________________________________",
+    "Assinatura do(a) Responsável"
+  ].join("\n");
 }
 
 module.exports = async function handler(request, response) {
@@ -48,50 +86,48 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        system_instruction: {
-          parts: [{
-            text: [
-              "Você é um redator administrativo brasileiro especializado em registros escolares.",
-              "Transforme o relato em um registro formal, claro, impessoal e organizado em formato de ata.",
-              "Preserve rigorosamente todos os fatos informados.",
-              "Não invente nomes, datas, horários, locais, falas, testemunhas, providências, conclusões ou enquadramentos legais.",
-              "Não atenue nem intensifique a gravidade do conteúdo.",
-              "Quando uma informação não tiver sido fornecida, simplesmente a omita.",
-              "Corrija ortografia, concordância e pontuação.",
-              "Entregue somente o texto final em português do Brasil, sem comentários ou blocos Markdown.",
-              "Use o título REGISTRO FORMAL DA DENÚNCIA e parágrafos objetivos."
-            ].join(" ")
-          }]
+        method: "POST",
+        headers: {
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+          "Content-Type": "application/json"
         },
-        contents: [{
-          role: "user",
-          parts: [{
-            text: JSON.stringify({
-              escola: typeof school === "string" ? school : "",
-              classificacao: typeof severity === "string" ? severity : "",
-              data_hora_atendimento: typeof receivedAt === "string" ? receivedAt : "",
-              relato_original: report.trim()
-            })
-          }]
-        }],
-        generationConfig: {
-          maxOutputTokens: 1800,
-          thinkingConfig: {
-            thinkingLevel: "low"
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{
+              text: [
+                "Você é um redator administrativo brasileiro especializado em registros escolares.",
+                "Reescreva somente o relato como um único parágrafo formal, claro, impessoal e contínuo, em estilo de ata.",
+                "Não escreva título, escola, data, horário, classificação, tópicos, listas, campos de assinatura ou observações.",
+                "Não use quebras de linha nem espaços entre parágrafos.",
+                "Preserve rigorosamente todos os fatos informados.",
+                "Não invente nomes, datas, horários, locais, falas, testemunhas, providências, conclusões ou enquadramentos legais.",
+                "Não atenue nem intensifique a gravidade do conteúdo.",
+                "Quando uma informação não tiver sido fornecida, simplesmente a omita.",
+                "Corrija ortografia, concordância e pontuação.",
+                "Entregue somente o parágrafo final em português do Brasil, sem Markdown."
+              ].join(" ")
+            }]
+          },
+          contents: [{
+            role: "user",
+            parts: [{
+              text: JSON.stringify({
+                classificacao_interna: typeof severity === "string" ? severity : "",
+                relato_original: report.trim()
+              })
+            }]
+          }],
+          generationConfig: {
+            maxOutputTokens: 1800,
+            thinkingConfig: { thinkingLevel: "low" }
           }
-        }
-      })
-    });
+        })
+      }
+    );
 
     const data = await geminiResponse.json();
     if (!geminiResponse.ok) {
@@ -103,19 +139,20 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const text = (data.candidates || [])
+    const generatedText = (data.candidates || [])
       .flatMap((candidate) => candidate.content?.parts || [])
       .map((item) => item.text)
       .filter(Boolean)
-      .join("\n")
-      .trim();
+      .join(" ");
+    const narrative = normalizeNarrative(generatedText).slice(0, 4200).trim();
 
-    if (!text) {
-      response.status(502).json({ error: "A IA não retornou um texto válido." });
+    if (!narrative) {
+      response.status(502).json({ error: "A IA não retornou um relato válido." });
       return;
     }
 
-    response.status(200).json({ text: text.slice(0, 5000) });
+    const text = buildFormalRecord({ narrative, school, receivedAt });
+    response.status(200).json({ text });
   } catch (error) {
     console.error(error);
     response.status(502).json({ error: "Não foi possível acessar o serviço de IA." });

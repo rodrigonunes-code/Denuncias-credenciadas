@@ -810,6 +810,11 @@ textarea {
   resize: vertical;
 }
 
+#reportText {
+  text-align: justify;
+  white-space: pre-wrap;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -1215,6 +1220,7 @@ textarea:focus {
   background: #f7fafb;
   font-size: 13px;
   line-height: 1.6;
+  text-align: justify;
   white-space: pre-wrap;
 }
 
