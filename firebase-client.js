@@ -22,7 +22,7 @@ import {
 import {
   getStorage,
   ref,
-  uploadBytes,
+  uploadBytesResumable,
   getDownloadURL,
   deleteObject
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
@@ -114,22 +114,39 @@ export async function seedSchoolDocuments(names) {
   }
 }
 
-export async function createComplaint({ schoolId, schoolName, severity, report, files }) {
+export async function createComplaint({ schoolId, schoolName, severity, report, files, onUploadProgress }) {
   const complaintRef = doc(collection(database, "complaints"));
   const attachments = [];
 
-  for (const file of files) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `complaints/${complaintRef.id}/${Date.now()}-${safeName}`;
-    await uploadBytes(ref(storage, path), file, { contentType: file.type || "application/octet-stream" });
-    attachments.push({ name: file.name, type: file.type, size: file.size, path });
-  }
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const metaRef = doc(database, "meta", `sequence-${year}`);
-
   try {
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    let completedBytes = 0;
+
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `complaints/${complaintRef.id}/${Date.now()}-${index}-${safeName}`;
+      const storageReference = ref(storage, path);
+
+      await uploadFile(storageReference, file, (transferred) => {
+        const sent = completedBytes + transferred;
+        const percent = totalBytes ? Math.round((sent / totalBytes) * 100) : 100;
+        onUploadProgress?.({
+          percent,
+          fileName: file.name,
+          fileNumber: index + 1,
+          totalFiles: files.length
+        });
+      });
+
+      completedBytes += file.size;
+      attachments.push({ name: file.name, type: file.type, size: file.size, path });
+    }
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const metaRef = doc(database, "meta", `sequence-${year}`);
+
     return await runTransaction(database, async (transaction) => {
       const metaSnapshot = await transaction.get(metaRef);
       const sequence = (metaSnapshot.data()?.value || 0) + 1;
@@ -152,8 +169,43 @@ export async function createComplaint({ schoolId, schoolName, severity, report, 
     });
   } catch (error) {
     await Promise.allSettled(attachments.map((item) => deleteObject(ref(storage, item.path))));
-    throw error;
+    throw normalizeStorageError(error);
   }
+}
+
+function uploadFile(storageReference, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(storageReference, file, {
+      contentType: file.type || "application/octet-stream",
+      customMetadata: {
+        originalName: file.name
+      }
+    });
+    task.on(
+      "state_changed",
+      (snapshot) => onProgress(snapshot.bytesTransferred),
+      reject,
+      () => resolve(task.snapshot)
+    );
+  });
+}
+
+function normalizeStorageError(error) {
+  const code = error?.code || "";
+  const messages = {
+    "storage/unauthorized": "O Firebase Storage recusou o anexo. Publique as regras de storage.rules e confirme que o usuário está autenticado.",
+    "storage/unauthenticated": "Sua sessão expirou durante o envio. Entre novamente e repita o cadastro.",
+    "storage/bucket-not-found": "O bucket do Firebase Storage não foi encontrado. Confira FIREBASE_STORAGE_BUCKET na Vercel.",
+    "storage/quota-exceeded": "A cota do Firebase Storage foi excedida ou o faturamento não está ativo.",
+    "storage/project-not-found": "O projeto do Firebase configurado na Vercel não foi encontrado.",
+    "storage/retry-limit-exceeded": "O envio demorou além do limite. Verifique a conexão e tente novamente.",
+    "storage/canceled": "O envio do anexo foi cancelado.",
+    "storage/invalid-checksum": "O arquivo chegou corrompido ao servidor. Selecione-o novamente.",
+    "storage/server-file-wrong-size": "O tamanho recebido pelo Storage não corresponde ao arquivo enviado."
+  };
+  const wrapped = new Error(messages[code] || error?.message || "Não foi possível enviar os anexos.");
+  wrapped.code = code;
+  return wrapped;
 }
 
 export async function removeComplaint(complaint) {

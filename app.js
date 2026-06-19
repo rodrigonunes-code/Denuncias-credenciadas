@@ -306,13 +306,15 @@ async function submitComplaint(event) {
     return;
   }
 
+  setComplaintSaving(true);
   try {
     const number = await createComplaint({
       schoolId,
       schoolName: school.name,
       severity,
       report,
-      files: selectedFiles
+      files: selectedFiles,
+      onUploadProgress: updateUploadProgress
     });
     await refreshData();
     clearComplaintForm(false);
@@ -321,8 +323,41 @@ async function submitComplaint(event) {
     switchView("denuncias");
   } catch (error) {
     console.error(error);
-    showToast("Erro ao salvar a denúncia. Verifique o espaço disponível.", true);
+    showToast(error.message || "Erro ao salvar a denúncia.", true);
+  } finally {
+    setComplaintSaving(false);
   }
+}
+
+function setComplaintSaving(isSaving) {
+  const submitButton = $("#complaintSubmitBtn");
+  submitButton.disabled = isSaving;
+  $("#clearFormBtn").disabled = isSaving;
+  $("#attachmentInput").disabled = isSaving;
+  submitButton.textContent = isSaving ? "Salvando..." : "Registrar denúncia";
+
+  if (isSaving && selectedFiles.length) {
+    $("#uploadProgress").classList.remove("hidden");
+    updateUploadProgress({
+      percent: 0,
+      fileName: selectedFiles[0].name,
+      fileNumber: 1,
+      totalFiles: selectedFiles.length
+    });
+  } else if (!isSaving) {
+    setTimeout(() => {
+      $("#uploadProgress").classList.add("hidden");
+      $("#uploadProgressBar").style.width = "0%";
+    }, 500);
+  }
+}
+
+function updateUploadProgress({ percent, fileName, fileNumber, totalFiles }) {
+  const safePercent = Math.max(0, Math.min(100, percent || 0));
+  $("#uploadProgressText").textContent =
+    `Enviando ${fileNumber} de ${totalFiles}: ${fileName}`;
+  $("#uploadProgressPercent").textContent = `${safePercent}%`;
+  $("#uploadProgressBar").style.width = `${safePercent}%`;
 }
 
 function clearComplaintForm(confirmClear = true) {
