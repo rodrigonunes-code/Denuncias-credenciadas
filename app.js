@@ -13,8 +13,7 @@ import {
   removeDocument,
   seedSchoolDocuments,
   createComplaint,
-  removeComplaint,
-  attachmentUrl
+  removeComplaint
 } from "./firebase-client.js";
 
 const OFFICIAL_SCHOOLS = [
@@ -105,7 +104,6 @@ const OFFICIAL_SCHOOLS = [
 
 let complaints = [];
 let schools = [];
-let selectedFiles = [];
 let activeComplaintId = null;
 let toastTimer;
 let originalReportBeforeAi = "";
@@ -180,7 +178,6 @@ function bindEvents() {
   $("#reportText").addEventListener("input", updateCharCount);
   $("#formalizeAiBtn").addEventListener("click", formalizeReportWithAi);
   $("#restoreOriginalBtn").addEventListener("click", restoreOriginalReport);
-  $("#attachmentInput").addEventListener("change", (event) => addFiles(event.target.files));
   $("#clearFormBtn").addEventListener("click", clearComplaintForm);
   $("#searchInput").addEventListener("input", renderComplaintsList);
   $("#severityFilter").addEventListener("change", renderComplaintsList);
@@ -198,20 +195,6 @@ function bindEvents() {
     if (event.key === "Escape") closeModal();
   });
 
-  const uploadArea = $("#uploadArea");
-  ["dragenter", "dragover"].forEach((eventName) => {
-    uploadArea.addEventListener(eventName, (event) => {
-      event.preventDefault();
-      uploadArea.classList.add("dragover");
-    });
-  });
-  ["dragleave", "drop"].forEach((eventName) => {
-    uploadArea.addEventListener(eventName, (event) => {
-      event.preventDefault();
-      uploadArea.classList.remove("dragover");
-    });
-  });
-  uploadArea.addEventListener("drop", (event) => addFiles(event.dataTransfer.files));
 }
 
 async function handleLogin(event) {
@@ -312,9 +295,7 @@ async function submitComplaint(event) {
       schoolId,
       schoolName: school.name,
       severity,
-      report,
-      files: selectedFiles,
-      onUploadProgress: updateUploadProgress
+      report
     });
     await refreshData();
     clearComplaintForm(false);
@@ -333,42 +314,16 @@ function setComplaintSaving(isSaving) {
   const submitButton = $("#complaintSubmitBtn");
   submitButton.disabled = isSaving;
   $("#clearFormBtn").disabled = isSaving;
-  $("#attachmentInput").disabled = isSaving;
   submitButton.textContent = isSaving ? "Salvando..." : "Registrar denúncia";
-
-  if (isSaving && selectedFiles.length) {
-    $("#uploadProgress").classList.remove("hidden");
-    updateUploadProgress({
-      percent: 0,
-      fileName: selectedFiles[0].name,
-      fileNumber: 1,
-      totalFiles: selectedFiles.length
-    });
-  } else if (!isSaving) {
-    setTimeout(() => {
-      $("#uploadProgress").classList.add("hidden");
-      $("#uploadProgressBar").style.width = "0%";
-    }, 500);
-  }
-}
-
-function updateUploadProgress({ percent, fileName, fileNumber, totalFiles }) {
-  const safePercent = Math.max(0, Math.min(100, percent || 0));
-  $("#uploadProgressText").textContent =
-    `Enviando ${fileNumber} de ${totalFiles}: ${fileName}`;
-  $("#uploadProgressPercent").textContent = `${safePercent}%`;
-  $("#uploadProgressBar").style.width = `${safePercent}%`;
 }
 
 function clearComplaintForm(confirmClear = true) {
-  const hasContent = $("#schoolSelect").value || $("#reportText").value || selectedFiles.length;
+  const hasContent = $("#schoolSelect").value || $("#reportText").value;
   if (confirmClear && hasContent && !window.confirm("Deseja limpar os dados preenchidos?")) return;
   $("#complaintForm").reset();
-  selectedFiles = [];
   originalReportBeforeAi = "";
   $("#aiResultActions").classList.add("hidden");
   updateCharCount();
-  renderSelectedFiles();
 }
 
 function updateCharCount() {
@@ -434,43 +389,6 @@ function restoreOriginalReport() {
   $("#aiResultActions").classList.add("hidden");
   updateCharCount();
   showToast("Texto original restaurado.");
-}
-
-function addFiles(fileList) {
-  const incoming = [...fileList];
-  const oversized = incoming.filter((file) => file.size > 10 * 1024 * 1024);
-  const accepted = incoming.filter((file) => file.size <= 10 * 1024 * 1024);
-
-  if (oversized.length) {
-    showToast(`${oversized.length} arquivo(s) excedem o limite de 10 MB.`, true);
-  }
-
-  accepted.forEach((file) => {
-    const duplicate = selectedFiles.some((item) => item.name === file.name && item.size === file.size);
-    if (!duplicate) selectedFiles.push(file);
-  });
-  $("#attachmentInput").value = "";
-  renderSelectedFiles();
-}
-
-function renderSelectedFiles() {
-  $("#attachmentList").innerHTML = selectedFiles.map((file, index) => `
-    <div class="attachment-item">
-      <span aria-hidden="true">▧</span>
-      <div class="file-info">
-        <strong>${escapeHtml(file.name)}</strong>
-        <small>${formatFileSize(file.size)}</small>
-      </div>
-      <button type="button" class="remove-file" data-file-index="${index}" aria-label="Remover arquivo">×</button>
-    </div>
-  `).join("");
-
-  $$("[data-file-index]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedFiles.splice(Number(button.dataset.fileIndex), 1);
-      renderSelectedFiles();
-    });
-  });
 }
 
 async function submitSchool(event) {
@@ -637,19 +555,18 @@ function renderComplaintsList() {
   });
 
   $("#resultCount").textContent = filtered.length;
-  $("#complaintsTable").innerHTML = filtered.map((item) => complaintRow(item, true)).join("");
+  $("#complaintsTable").innerHTML = filtered.map(complaintRow).join("");
   $("#complaintsEmpty").classList.toggle("hidden", filtered.length > 0);
   bindDetailButtons();
 }
 
-function complaintRow(item, includeAttachments = false) {
+function complaintRow(item) {
   return `
     <tr>
       <td><button class="number-link" data-detail-id="${item.id}">${escapeHtml(item.number)}</button></td>
       <td>${formatDateTime(item.createdAt)}</td>
       <td>${escapeHtml(item.schoolName)}</td>
       <td>${severityBadge(item.severity)}</td>
-      ${includeAttachments ? `<td>${item.attachments?.length || 0}</td>` : ""}
       <td>
         <div class="table-actions">
           <button class="text-button" data-detail-id="${item.id}">Detalhes →</button>
@@ -830,35 +747,17 @@ function openComplaintDetail(id) {
   activeComplaintId = id;
   $("#modalTitle").textContent = `Denúncia ${complaint.number}`;
 
-  const attachments = complaint.attachments || [];
   $("#modalContent").innerHTML = `
     <div class="detail-grid">
       <div class="detail-card"><span>Escola</span><strong>${escapeHtml(complaint.schoolName)}</strong></div>
       <div class="detail-card"><span>Data e horário</span><strong>${formatDateTime(complaint.createdAt)}</strong></div>
       <div class="detail-card"><span>Classificação</span><strong>${severityBadge(complaint.severity)}</strong></div>
-      <div class="detail-card"><span>Anexos</span><strong>${attachments.length}</strong></div>
     </div>
     <div class="report-box">
       <h3>Relato do ocorrido</h3>
       <p>${escapeHtml(complaint.report)}</p>
     </div>
-    <div class="modal-attachments">
-      <h3>Fotos e documentos</h3>
-      ${attachments.length ? attachments.map((file, index) => `
-        <div class="attachment-download">
-          <span>▧ ${escapeHtml(file.name)} (${formatFileSize(file.size)})</span>
-          <a href="#" data-download-index="${index}">Baixar arquivo</a>
-        </div>
-      `).join("") : '<p style="color:#82939b;font-size:11px">Nenhum arquivo anexado.</p>'}
-    </div>
   `;
-
-  $$("[data-download-index]").forEach((link) => {
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      downloadAttachment(attachments[Number(link.dataset.downloadIndex)]);
-    });
-  });
   $("#detailModal").classList.remove("hidden");
   document.body.style.overflow = "hidden";
 }
@@ -881,31 +780,19 @@ async function deleteActiveComplaint() {
   showToast("Denúncia excluída.");
 }
 
-async function downloadAttachment(file) {
-  const url = await attachmentUrl(file.path);
-  const link = document.createElement("a");
-  link.href = url;
-  link.target = "_blank";
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-}
-
 function exportCsv() {
   if (!complaints.length) {
     showToast("Não há denúncias para exportar.", true);
     return;
   }
 
-  const header = ["Número", "Data e horário", "Escola", "Gravidade", "Relato", "Quantidade de anexos"];
+  const header = ["Número", "Data e horário", "Escola", "Gravidade", "Relato"];
   const rows = complaints.map((item) => [
     item.number,
     formatDateTime(item.createdAt),
     item.schoolName,
     item.severity,
-    item.report,
-    item.attachments?.length || 0
+    item.report
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
   downloadBlob(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }), `denuncias-${dateStamp()}.csv`);
@@ -918,8 +805,7 @@ async function exportBackup() {
     version: 2,
     exportedAt: new Date().toISOString(),
     schools,
-    complaints,
-    note: "Os documentos permanecem protegidos no Firebase Storage e são referenciados pelo campo path."
+    complaints
   };
   downloadBlob(
     new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }),
@@ -953,12 +839,6 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
-}
-
-function formatFileSize(bytes = 0) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function normalize(value = "") {

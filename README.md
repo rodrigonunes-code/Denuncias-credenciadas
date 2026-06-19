@@ -8,7 +8,6 @@ Sistema web protegido para registrar e acompanhar denúncias recebidas de escola
 - **Vercel:** site público, HTTPS e funções protegidas da IA.
 - **Firebase Authentication:** acesso por e-mail e senha.
 - **Cloud Firestore:** escolas, denúncias e numeração anual.
-- **Firebase Storage:** fotos e documentos.
 - **Gemini API:** formalização opcional dos relatos.
 
 ## Configuração do Firebase
@@ -17,10 +16,9 @@ Sistema web protegido para registrar e acompanhar denúncias recebidas de escola
 2. Registre um aplicativo Web.
 3. Ative **Authentication > E-mail/senha**.
 4. Crie o banco **Cloud Firestore**.
-5. Ative **Storage**.
-6. Publique `firestore.rules` e `storage.rules`.
-7. Em **Authentication > Usuários**, crie as contas autorizadas. O sistema não oferece cadastro público.
-8. Adicione o domínio final da Vercel aos domínios autorizados do Authentication.
+5. Publique `firestore.rules`.
+6. Em **Authentication > Usuários**, crie as contas autorizadas. O sistema não oferece cadastro público.
+7. Adicione o domínio final da Vercel aos domínios autorizados do Authentication.
 
 ## Variáveis da Vercel
 
@@ -32,7 +30,6 @@ GEMINI_MODEL
 FIREBASE_API_KEY
 FIREBASE_AUTH_DOMAIN
 FIREBASE_PROJECT_ID
-FIREBASE_STORAGE_BUCKET
 FIREBASE_MESSAGING_SENDER_ID
 FIREBASE_APP_ID
 ```
@@ -51,10 +48,9 @@ Acesse `http://127.0.0.1:8765`.
 
 ## Segurança e privacidade
 
-- Usuários anônimos não acessam Firestore nem Storage.
+- Usuários anônimos não acessam o Firestore.
 - A chave do Gemini fica somente na função serverless.
 - O endpoint da IA valida a sessão do Firebase.
-- Anexos são limitados a 10 MB.
 - A IA é instruída a preservar os fatos e não inventar informações.
 - O texto gerado deve ser revisado antes do registro.
 
@@ -66,7 +62,6 @@ Como os relatos podem conter dados pessoais ou sensíveis, mantenha somente usu�
 - Data e horário automáticos
 - 83 escolas pré-cadastradas
 - Classificação por gravidade
-- Fotos e documentos
 - Pesquisa, filtros e dashboard
 - Exportação CSV e backup JSON
 - Formalização do relato com IA
