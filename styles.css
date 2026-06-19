@@ -60,6 +60,19 @@ body {
   margin-bottom: 22px;
 }
 
+.unit-name {
+  display: inline-flex;
+  min-height: 43px;
+  align-items: center;
+  padding: 9px 14px;
+  border-radius: 11px;
+  color: var(--navy);
+  background: #b8e5de;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+}
+
 .auth-card h1 {
   margin: 7px 0;
   font-size: 25px;
