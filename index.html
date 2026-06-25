@@ -352,7 +352,11 @@
             <h2>Denúncias registradas</h2>
             <p>Consulte, filtre e visualize os registros salvos.</p>
           </div>
-          <button class="button button-secondary" id="exportCsvBtn">Exportar CSV</button>
+          <div class="section-actions">
+            <input type="file" id="importSpreadsheetInput" accept=".xlsx,.xls,.csv" hidden>
+            <button class="button button-secondary" id="importSpreadsheetBtn">Importar planilha</button>
+            <button class="button button-secondary" id="exportCsvBtn">Exportar CSV</button>
+          </div>
         </div>
 
         <div class="filter-panel">
@@ -461,6 +465,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

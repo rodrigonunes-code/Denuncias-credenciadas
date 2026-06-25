@@ -112,6 +112,20 @@ const FINAL_STATUS_OPTIONS = [
   "Improcedente",
   "Arquivada"
 ];
+const SCHOOL_IMPORT_ALIASES = {
+  "cubinho da fe": ["clubinho da fe"],
+  "castelinho amarelo": ["castelo amarelo"],
+  "escola colore": ["colore"],
+  "intituto anjos e marmanjos": ["instituto anjos e marmanjos"],
+  "geracao vida centro i": ["geracao vida centro"],
+  "geracao vida olaria": ["geracao olaria"],
+  "geracao vida unidade estancia": ["geracao estancia"],
+  "tia neca": ["tia neca guajuviras"],
+  "sao jose": ["sao jose"],
+  "vo maria": ["vo maria"],
+  "exito": ["exito"],
+  "baby": ["baby rio branco"]
+};
 
 let complaints = [];
 let schools = [];
@@ -198,6 +212,8 @@ function bindEvents() {
   $("#classificationFilter").addEventListener("change", renderComplaintsList);
   $("#statusFilter").addEventListener("change", renderComplaintsList);
   $("#schoolFilter").addEventListener("change", renderComplaintsList);
+  $("#importSpreadsheetBtn").addEventListener("click", () => $("#importSpreadsheetInput").click());
+  $("#importSpreadsheetInput").addEventListener("change", importSpreadsheet);
   $("#exportCsvBtn").addEventListener("click", exportCsv);
   $("#backupBtn").addEventListener("click", exportBackup);
   $("#closeModalBtn").addEventListener("click", closeModal);
@@ -341,6 +357,7 @@ async function submitComplaint(event) {
       schoolId,
       schoolName: school.name,
       attendanceAt,
+      attendanceTimeKnown: true,
       classification,
       severity,
       finalStatus,
@@ -669,7 +686,7 @@ function complaintRow(item) {
   return `
     <tr>
       <td><button class="number-link" data-detail-id="${item.id}">${escapeHtml(item.number)}</button></td>
-      <td>${formatDateTime(getComplaintDateTime(item))}</td>
+      <td>${formatComplaintDateTime(item)}</td>
       <td>${escapeHtml(item.schoolName)}</td>
       <td>${escapeHtml(item.classification || "Não informada")}</td>
       <td>${severityBadge(item.severity)}</td>
@@ -811,7 +828,7 @@ function printComplaint(id) {
       <section class="identification">
         <p><span class="label">Número da denúncia:</span> ${escapeHtml(complaint.number)}</p>
         <p><span class="label">Escola:</span> ${escapeHtml(complaint.schoolName)}</p>
-        <p><span class="label">Data e horário do atendimento:</span> ${escapeHtml(formatDateTime(getComplaintDateTime(complaint)))}</p>
+        <p><span class="label">Data e horário do atendimento:</span> ${escapeHtml(formatComplaintDateTime(complaint))}</p>
         <p><span class="label">Classificação da denúncia:</span> ${escapeHtml(complaint.classification || "Não informada")}</p>
         <p><span class="label">Gravidade:</span> ${escapeHtml(severityLabel(complaint.severity))}</p>
         <p><span class="label">Situação final:</span> ${escapeHtml(complaint.finalStatus || DEFAULT_FINAL_STATUS)}</p>
@@ -863,7 +880,7 @@ function openComplaintDetail(id) {
   $("#modalContent").innerHTML = `
     <div class="detail-grid">
       <div class="detail-card"><span>Escola</span><strong>${escapeHtml(complaint.schoolName)}</strong></div>
-      <div class="detail-card"><span>Data e horário</span><strong>${formatDateTime(getComplaintDateTime(complaint))}</strong></div>
+      <div class="detail-card"><span>Data e horário</span><strong>${formatComplaintDateTime(complaint)}</strong></div>
       <div class="detail-card"><span>Classificação da denúncia</span><strong>${escapeHtml(complaint.classification || "Não informada")}</strong></div>
       <div class="detail-card"><span>Gravidade</span><strong>${severityBadge(complaint.severity)}</strong></div>
       <div class="detail-card"><span>Situação final</span><strong>${escapeHtml(complaint.finalStatus || DEFAULT_FINAL_STATUS)}</strong></div>
@@ -900,6 +917,212 @@ async function deleteActiveComplaint() {
   showToast("Denúncia excluída.");
 }
 
+async function importSpreadsheet(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+
+  if (!window.XLSX) {
+    showToast("O leitor de planilhas ainda não foi carregado. Atualize a página e tente novamente.", true);
+    return;
+  }
+
+  const button = $("#importSpreadsheetBtn");
+  button.disabled = true;
+  button.textContent = "Lendo planilha...";
+
+  try {
+    const workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+    const firstSheetName = workbook.SheetNames[0];
+    const firstSheet = workbook.Sheets[firstSheetName];
+    const rows = window.XLSX.utils.sheet_to_json(firstSheet, { defval: "", raw: false });
+
+    if (!rows.length) {
+      showToast("A primeira aba da planilha não possui denúncias para importar.", true);
+      return;
+    }
+
+    const { validRows, problems } = prepareImportRows(rows);
+    if (problems.length) {
+      downloadImportReport(problems);
+      showToast(`Importação não realizada. Corrija as ${problems.length} pendência(s) do relatório baixado.`, true);
+      return;
+    }
+
+    if (!validRows.length) {
+      showToast("Nenhuma denúncia válida encontrada na primeira aba.", true);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Importar ${validRows.length} denúncia(s) da primeira aba "${firstSheetName}"?\n\n` +
+      "Atenção: evite importar a mesma planilha mais de uma vez para não duplicar registros."
+    );
+    if (!confirmed) return;
+
+    for (let index = 0; index < validRows.length; index += 1) {
+      button.textContent = `Importando ${index + 1}/${validRows.length}...`;
+      await createComplaint(validRows[index]);
+    }
+
+    await refreshData();
+    renderAll();
+    showToast(`${validRows.length} denúncia(s) importada(s) com sucesso.`);
+    switchView("denuncias");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Erro ao importar a planilha.", true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Importar planilha";
+  }
+}
+
+function prepareImportRows(rows) {
+  const validRows = [];
+  const problems = [];
+  const existingKeys = new Set(complaints.map((item) => duplicateKey(item.schoolId, getComplaintDateTime(item), item.report)));
+  const pendingKeys = new Set();
+
+  rows.forEach((row, index) => {
+    const line = index + 2;
+    const rawDate = getImportValue(row, ["Data do Atendimento", "Data do atendimento", "Data"]);
+    const rawSchool = getImportValue(row, ["Escola", "Nome da escola"]);
+    const rawReport = getImportValue(row, ["Relato da Denúncia", "Relato da denúncia", "Relato"]);
+    const rawClassification = getImportValue(row, ["Classificação da Denúncia", "Classificacao da Denuncia", "Classificação"]);
+    const rawSeverity = getImportValue(row, ["Gravidade", "Classificação de gravidade"]);
+    const rawFinalStatus = getImportValue(row, ["Situação Final", "Situacao Final", "Situação"]);
+    const rawActionsTaken = getImportValue(row, ["Providências Adotadas", "Providencias Adotadas", "Providências"]);
+
+    if (!Object.values(row).some((value) => String(value || "").trim())) return;
+
+    const date = parseImportDate(rawDate);
+    if (!date) problems.push(importProblem(line, "Data do atendimento", rawDate, "Data inválida. Use o formato dd/mm/aaaa."));
+
+    const school = findSchoolMatch(rawSchool);
+    if (!school) problems.push(importProblem(line, "Escola", rawSchool, "Não foi possível relacionar com a lista de escolas cadastradas."));
+
+    const severity = normalizeSeverity(rawSeverity);
+    if (!severity) problems.push(importProblem(line, "Gravidade", rawSeverity, "Use Baixa, Média ou Grave."));
+
+    const report = String(rawReport || "").trim();
+    if (report.length < 5) problems.push(importProblem(line, "Relato da denúncia", rawReport, "Relato vazio ou muito curto."));
+
+    const classification = String(rawClassification || "").trim();
+    if (!classification) problems.push(importProblem(line, "Classificação da denúncia", rawClassification, "Campo obrigatório."));
+
+    if (!date || !school || !severity || !report || !classification) return;
+
+    const key = duplicateKey(school.id, date.iso, report);
+    if (existingKeys.has(key) || pendingKeys.has(key)) {
+      problems.push(importProblem(line, "Duplicidade", rawSchool, "Possível denúncia duplicada pela mesma escola, data e relato."));
+      return;
+    }
+    pendingKeys.add(key);
+
+    validRows.push({
+      schoolId: school.id,
+      schoolName: school.name,
+      attendanceAt: date.iso,
+      attendanceTimeKnown: date.timeKnown,
+      classification,
+      severity,
+      finalStatus: String(rawFinalStatus || "").trim() || DEFAULT_FINAL_STATUS,
+      actionsTaken: String(rawActionsTaken || "").trim(),
+      report
+    });
+  });
+
+  return { validRows, problems };
+}
+
+function getImportValue(row, candidates) {
+  const normalizedCandidates = candidates.map(normalizeHeader);
+  const key = Object.keys(row).find((item) => normalizedCandidates.includes(normalizeHeader(item)));
+  return key ? row[key] : "";
+}
+
+function normalizeHeader(value = "") {
+  return normalize(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function parseImportDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const brMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if (brMatch) {
+    const [, day, month, year, hour = "12", minute = "00"] = brMatch;
+    const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0);
+    if (!Number.isNaN(date.getTime())) return { iso: date.toISOString(), timeKnown: Boolean(brMatch[4]) };
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return { iso: parsed.toISOString(), timeKnown: /:\d{2}/.test(raw) };
+
+  return null;
+}
+
+function normalizeSeverity(value = "") {
+  const normalized = normalize(value);
+  if (normalized.includes("grave")) return "Grave";
+  if (normalized.includes("media")) return "Média";
+  if (normalized.includes("baixa")) return "Baixa";
+  return "";
+}
+
+function findSchoolMatch(value = "") {
+  const target = normalizeSchoolForMatch(value);
+  if (!target) return null;
+
+  const exact = schools.find((school) => normalizeSchoolForMatch(school.name) === target);
+  if (exact) return exact;
+
+  const aliasNeedles = SCHOOL_IMPORT_ALIASES[target] || [];
+  for (const needle of aliasNeedles) {
+    const match = uniqueSchoolMatch((school) => normalizeSchoolForMatch(school.name).includes(needle));
+    if (match) return match;
+  }
+
+  return uniqueSchoolMatch((school) => {
+    const official = normalizeSchoolForMatch(school.name);
+    return official.includes(target) || target.includes(official);
+  });
+}
+
+function uniqueSchoolMatch(predicate) {
+  const matches = schools.filter(predicate);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function normalizeSchoolForMatch(value = "") {
+  return normalize(value)
+    .replace(/\bee?i\b/g, " ")
+    .replace(/\bescola\b/g, " ")
+    .replace(/\bcreche\b/g, " ")
+    .replace(/\bprivada\b/g, " ")
+    .replace(/\bsem fins lucrativos\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function duplicateKey(schoolId, dateValue, report) {
+  const date = dateValue ? new Date(dateValue).toISOString().slice(0, 10) : "";
+  return `${schoolId}|${date}|${normalize(report).slice(0, 140)}`;
+}
+
+function importProblem(line, field, value, problem) {
+  return { line, field, value: String(value || ""), problem };
+}
+
+function downloadImportReport(problems) {
+  const header = ["Linha", "Campo", "Valor", "Pendência"];
+  const rows = problems.map((item) => [item.line, item.field, item.value, item.problem]);
+  const csv = [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
+  downloadBlob(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }), `pendencias-importacao-${dateStamp()}.csv`);
+}
+
 function exportCsv() {
   if (!complaints.length) {
     showToast("Não há denúncias para exportar.", true);
@@ -909,7 +1132,7 @@ function exportCsv() {
   const header = ["Número", "Data do atendimento", "Escola", "Classificação da denúncia", "Gravidade", "Situação final", "Providências adotadas", "Registrado por", "Relato"];
   const rows = complaints.map((item) => [
     item.number,
-    formatDateTime(getComplaintDateTime(item)),
+    formatComplaintDateTime(item),
     item.schoolName,
     item.classification || "",
     item.severity,
@@ -982,6 +1205,19 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatDateOnly(value) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
+function formatComplaintDateTime(complaint) {
+  const value = getComplaintDateTime(complaint);
+  return complaint.attendanceTimeKnown === false ? formatDateOnly(value) : formatDateTime(value);
 }
 
 function toDateInputValue(value) {

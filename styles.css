@@ -696,6 +696,13 @@ tbody tr:hover {
   font-size: 13px;
 }
 
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .auto-number {
   min-width: 160px;
   padding: 14px 17px;
@@ -1295,6 +1302,10 @@ textarea:focus {
   .section-intro {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .section-actions {
+    justify-content: flex-start;
   }
 
   .date-badge {
