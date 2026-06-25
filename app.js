@@ -107,7 +107,10 @@ const FINAL_STATUS_OPTIONS = [
   "Em análise",
   "Em acompanhamento",
   "Encaminhada",
+  "Finalizada",
   "Resolvida",
+  "Resolvido com a escola",
+  "Transferência realizada",
   "Procedente",
   "Improcedente",
   "Arquivada"
@@ -557,7 +560,7 @@ function renderDashboard() {
   }).length;
   const graves = complaints.filter((item) => item.severity === "Grave").length;
   const inAnalysis = complaints.filter((item) => normalizeStatus(item.finalStatus) === normalizeStatus(DEFAULT_FINAL_STATUS)).length;
-  const finished = complaints.filter((item) => ["resolvida", "procedente", "improcedente", "arquivada"].includes(normalizeStatus(item.finalStatus))).length;
+  const finished = complaints.filter((item) => isFinalizedStatus(item.finalStatus)).length;
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recent = complaints.filter((item) => new Date(getComplaintDateTime(item)) >= thirtyDaysAgo).length;
@@ -1226,6 +1229,19 @@ function uniqueSorted(values) {
 
 function normalizeStatus(value = "") {
   return normalize(value).trim();
+}
+
+function isFinalizedStatus(value = "") {
+  const status = normalizeStatus(value);
+  return [
+    "finalizada",
+    "resolvida",
+    "resolvido com a escola",
+    "transferencia realizada",
+    "procedente",
+    "improcedente",
+    "arquivada"
+  ].includes(status);
 }
 
 function formatDateTime(value) {
