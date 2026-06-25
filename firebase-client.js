@@ -104,10 +104,19 @@ export async function seedSchoolDocuments(names) {
   }
 }
 
-export async function createComplaint({ schoolId, schoolName, severity, report }) {
+export async function createComplaint({
+  schoolId,
+  schoolName,
+  attendanceAt,
+  classification,
+  severity,
+  finalStatus,
+  actionsTaken,
+  report
+}) {
   const complaintRef = doc(collection(database, "complaints"));
 
-  const now = new Date();
+  const now = attendanceAt ? new Date(attendanceAt) : new Date();
   const year = now.getFullYear();
   const metaRef = doc(database, "meta", `sequence-${year}`);
 
@@ -122,7 +131,11 @@ export async function createComplaint({ schoolId, schoolName, severity, report }
         year,
         schoolId,
         schoolName,
+        attendanceAt: attendanceAt || null,
+        classification: classification || "",
         severity,
+        finalStatus: finalStatus || "Em análise",
+        actionsTaken: actionsTaken || "",
         report,
         createdAt: serverTimestamp(),
         createdBy: auth.currentUser?.uid || null,
@@ -141,6 +154,7 @@ function normalizeDocument(value) {
   const result = { ...value };
   if (value.createdAt?.toDate) result.createdAt = value.createdAt.toDate().toISOString();
   if (value.updatedAt?.toDate) result.updatedAt = value.updatedAt.toDate().toISOString();
+  if (value.attendanceAt?.toDate) result.attendanceAt = value.attendanceAt.toDate().toISOString();
   return result;
 }
 

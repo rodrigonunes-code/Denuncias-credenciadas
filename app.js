@@ -102,6 +102,17 @@ const OFFICIAL_SCHOOLS = [
   "EEI ÊXITO (SEM FINS LUCRATIVOS)"
 ];
 
+const DEFAULT_FINAL_STATUS = "Em análise";
+const FINAL_STATUS_OPTIONS = [
+  "Em análise",
+  "Em acompanhamento",
+  "Encaminhada",
+  "Resolvida",
+  "Procedente",
+  "Improcedente",
+  "Arquivada"
+];
+
 let complaints = [];
 let schools = [];
 let activeComplaintId = null;
@@ -134,6 +145,7 @@ async function init() {
       await seedSchools();
       await refreshData();
       updateCurrentDate();
+      setDefaultAttendanceDateTime();
       await updateNextNumber();
       renderAll();
     });
@@ -153,7 +165,7 @@ async function refreshData() {
     listDocuments("complaints"),
     listDocuments("schools")
   ]);
-  complaints.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  complaints.sort((a, b) => new Date(getComplaintDateTime(b)) - new Date(getComplaintDateTime(a)));
   schools.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 
@@ -175,12 +187,16 @@ function bindEvents() {
   $("#menuButton").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
   $("#complaintForm").addEventListener("submit", submitComplaint);
   $("#schoolForm").addEventListener("submit", submitSchool);
+  $("#attendanceDate").addEventListener("change", updateNextNumber);
+  $("#attendanceTime").addEventListener("change", updateNextNumber);
   $("#reportText").addEventListener("input", updateCharCount);
   $("#formalizeAiBtn").addEventListener("click", formalizeReportWithAi);
   $("#restoreOriginalBtn").addEventListener("click", restoreOriginalReport);
   $("#clearFormBtn").addEventListener("click", clearComplaintForm);
   $("#searchInput").addEventListener("input", renderComplaintsList);
   $("#severityFilter").addEventListener("change", renderComplaintsList);
+  $("#classificationFilter").addEventListener("change", renderComplaintsList);
+  $("#statusFilter").addEventListener("change", renderComplaintsList);
   $("#schoolFilter").addEventListener("change", renderComplaintsList);
   $("#exportCsvBtn").addEventListener("click", exportCsv);
   $("#backupBtn").addEventListener("click", exportBackup);
@@ -262,8 +278,22 @@ function updateCurrentDate() {
   }).format(new Date());
 }
 
+function setDefaultAttendanceDateTime() {
+  const now = new Date();
+  if ($("#attendanceDate") && !$("#attendanceDate").value) {
+    $("#attendanceDate").value = toDateInputValue(now);
+  }
+  if ($("#attendanceTime") && !$("#attendanceTime").value) {
+    $("#attendanceTime").value = toTimeInputValue(now);
+  }
+  if ($("#finalStatusInput") && !$("#finalStatusInput").value) {
+    $("#finalStatusInput").value = DEFAULT_FINAL_STATUS;
+  }
+}
+
 async function getNextComplaintNumber() {
-  const year = new Date().getFullYear();
+  const attendanceAt = getAttendanceAtFromForm();
+  const year = attendanceAt ? new Date(attendanceAt).getFullYear() : new Date().getFullYear();
   const next = Math.max(0, ...complaints.filter((item) => item.year === year).map((item) => item.sequence || 0)) + 1;
   return {
     number: `${String(next).padStart(3, "0")}/${year}`,
@@ -277,14 +307,30 @@ async function updateNextNumber() {
   $("#nextNumber").textContent = next.number;
 }
 
+function getAttendanceAtFromForm() {
+  const date = $("#attendanceDate")?.value || "";
+  const time = $("#attendanceTime")?.value || "00:00";
+  if (!date) return "";
+  const value = new Date(`${date}T${time || "00:00"}:00`);
+  return Number.isNaN(value.getTime()) ? "" : value.toISOString();
+}
+
+function getComplaintDateTime(complaint) {
+  return complaint.attendanceAt || complaint.createdAt;
+}
+
 async function submitComplaint(event) {
   event.preventDefault();
   const schoolId = $("#schoolSelect").value;
+  const attendanceAt = getAttendanceAtFromForm();
+  const classification = $("#classificationInput").value.trim();
   const severity = document.querySelector('input[name="severity"]:checked')?.value;
+  const finalStatus = $("#finalStatusInput").value.trim() || DEFAULT_FINAL_STATUS;
+  const actionsTaken = $("#actionsTakenText").value.trim();
   const report = $("#reportText").value.trim();
   const school = schools.find((item) => item.id === schoolId);
 
-  if (!school || !severity || !report) {
+  if (!school || !attendanceAt || !classification || !severity || !report) {
     showToast("Preencha os campos obrigatórios.", true);
     return;
   }
@@ -294,7 +340,11 @@ async function submitComplaint(event) {
     const number = await createComplaint({
       schoolId,
       schoolName: school.name,
+      attendanceAt,
+      classification,
       severity,
+      finalStatus,
+      actionsTaken,
       report
     });
     await refreshData();
@@ -318,12 +368,14 @@ function setComplaintSaving(isSaving) {
 }
 
 function clearComplaintForm(confirmClear = true) {
-  const hasContent = $("#schoolSelect").value || $("#reportText").value;
+  const hasContent = $("#schoolSelect").value || $("#reportText").value || $("#classificationInput").value || $("#actionsTakenText").value;
   if (confirmClear && hasContent && !window.confirm("Deseja limpar os dados preenchidos?")) return;
   $("#complaintForm").reset();
+  setDefaultAttendanceDateTime();
   originalReportBeforeAi = "";
   $("#aiResultActions").classList.add("hidden");
   updateCharCount();
+  updateNextNumber();
 }
 
 function updateCharCount() {
@@ -360,7 +412,7 @@ async function formalizeReportWithAi() {
         report,
         school: school?.name || "",
         severity,
-        receivedAt: new Date().toISOString()
+        receivedAt: getAttendanceAtFromForm() || new Date().toISOString()
       })
     });
     const data = await response.json().catch(() => ({}));
@@ -442,11 +494,21 @@ function renderAll() {
 function renderSchoolOptions() {
   const complaintValue = $("#schoolSelect").value;
   const filterValue = $("#schoolFilter").value;
+  const classificationFilterValue = $("#classificationFilter")?.value || "";
+  const statusFilterValue = $("#statusFilter")?.value || "";
   const options = schools.map((school) => `<option value="${school.id}">${escapeHtml(school.name)}</option>`).join("");
   $("#schoolSelect").innerHTML = `<option value="">Selecione a escola</option>${options}`;
   $("#schoolFilter").innerHTML = `<option value="">Todas as escolas</option>${options}`;
   $("#schoolSelect").value = complaintValue;
   $("#schoolFilter").value = filterValue;
+
+  const classifications = uniqueSorted(complaints.map((item) => item.classification).filter(Boolean));
+  $("#classificationFilter").innerHTML = `<option value="">Todas as classificações</option>${classifications.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("")}`;
+  $("#classificationFilter").value = classificationFilterValue;
+
+  const statuses = uniqueSorted([...FINAL_STATUS_OPTIONS, ...complaints.map((item) => item.finalStatus).filter(Boolean)]);
+  $("#statusFilter").innerHTML = `<option value="">Todas as situações</option>${statuses.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("")}`;
+  $("#statusFilter").value = statusFilterValue;
 }
 
 function renderSchools() {
@@ -473,13 +535,15 @@ function renderSchools() {
 function renderDashboard() {
   const now = new Date();
   const currentMonth = complaints.filter((item) => {
-    const date = new Date(item.createdAt);
+    const date = new Date(getComplaintDateTime(item));
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
   }).length;
   const graves = complaints.filter((item) => item.severity === "Grave").length;
+  const inAnalysis = complaints.filter((item) => normalizeStatus(item.finalStatus) === normalizeStatus(DEFAULT_FINAL_STATUS)).length;
+  const finished = complaints.filter((item) => ["resolvida", "procedente", "improcedente", "arquivada"].includes(normalizeStatus(item.finalStatus))).length;
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const recent = complaints.filter((item) => new Date(item.createdAt) >= thirtyDaysAgo).length;
+  const recent = complaints.filter((item) => new Date(getComplaintDateTime(item)) >= thirtyDaysAgo).length;
   const schoolsWithComplaints = new Set(complaints.map((item) => item.schoolId)).size;
 
   $("#statTotal").textContent = complaints.length;
@@ -489,9 +553,13 @@ function renderDashboard() {
   $("#statRecentes").textContent = recent;
   $("#statEscolas").textContent = schoolsWithComplaints;
   $("#statEscolasTotal").textContent = `de ${schools.length} credenciadas`;
+  $("#statAnalise").textContent = inAnalysis;
+  $("#statFinalizadas").textContent = finished;
 
   renderSchoolRanking();
   renderSeverityChart();
+  renderClassificationChart();
+  renderStatusChart();
   renderRecentTable();
 }
 
@@ -536,22 +604,59 @@ function renderSeverityChart() {
   }).join("");
 }
 
+function renderClassificationChart() {
+  renderDistributionChart("#classificationChart", complaints.map((item) => item.classification || "Não informada"));
+}
+
+function renderStatusChart() {
+  renderDistributionChart("#statusChart", complaints.map((item) => item.finalStatus || DEFAULT_FINAL_STATUS));
+}
+
+function renderDistributionChart(selector, values) {
+  const element = $(selector);
+  if (!element) return;
+  if (!complaints.length) {
+    element.innerHTML = "";
+    return;
+  }
+
+  const totals = new Map();
+  values.forEach((value) => {
+    const label = String(value || "Não informada").trim() || "Não informada";
+    totals.set(label, (totals.get(label) || 0) + 1);
+  });
+
+  const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const max = ranking[0]?.[1] || 1;
+  element.innerHTML = ranking.map(([label, total]) => `
+    <div class="distribution-row">
+      <span class="label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(total / max) * 100}%"></div></div>
+      <span class="value">${total}</span>
+    </div>
+  `).join("");
+}
+
 function renderRecentTable() {
   const rows = complaints.slice(0, 5);
-  $("#recentTable").innerHTML = rows.length ? rows.map(complaintRow).join("") : emptyTableRow(6);
+  $("#recentTable").innerHTML = rows.length ? rows.map(complaintRow).join("") : emptyTableRow(8);
   bindDetailButtons();
 }
 
 function renderComplaintsList() {
   const search = normalize($("#searchInput").value);
   const severity = $("#severityFilter").value;
+  const classification = $("#classificationFilter").value;
+  const finalStatus = $("#statusFilter").value;
   const schoolId = $("#schoolFilter").value;
 
   const filtered = complaints.filter((item) => {
-    const matchesSearch = !search || normalize(`${item.number} ${item.schoolName} ${item.report}`).includes(search);
+    const matchesSearch = !search || normalize(`${item.number} ${item.schoolName} ${item.classification || ""} ${item.finalStatus || ""} ${item.actionsTaken || ""} ${item.report}`).includes(search);
     const matchesSeverity = !severity || item.severity === severity;
+    const matchesClassification = !classification || item.classification === classification;
+    const matchesStatus = !finalStatus || item.finalStatus === finalStatus;
     const matchesSchool = !schoolId || item.schoolId === schoolId;
-    return matchesSearch && matchesSeverity && matchesSchool;
+    return matchesSearch && matchesSeverity && matchesClassification && matchesStatus && matchesSchool;
   });
 
   $("#resultCount").textContent = filtered.length;
@@ -564,9 +669,11 @@ function complaintRow(item) {
   return `
     <tr>
       <td><button class="number-link" data-detail-id="${item.id}">${escapeHtml(item.number)}</button></td>
-      <td>${formatDateTime(item.createdAt)}</td>
+      <td>${formatDateTime(getComplaintDateTime(item))}</td>
       <td>${escapeHtml(item.schoolName)}</td>
+      <td>${escapeHtml(item.classification || "Não informada")}</td>
       <td>${severityBadge(item.severity)}</td>
+      <td>${escapeHtml(item.finalStatus || DEFAULT_FINAL_STATUS)}</td>
       <td>${escapeHtml(complaintAuthor(item))}</td>
       <td>
         <div class="table-actions">
@@ -704,10 +811,14 @@ function printComplaint(id) {
       <section class="identification">
         <p><span class="label">Número da denúncia:</span> ${escapeHtml(complaint.number)}</p>
         <p><span class="label">Escola:</span> ${escapeHtml(complaint.schoolName)}</p>
-        <p><span class="label">Data e horário do atendimento:</span> ${escapeHtml(formatDateTime(complaint.createdAt))}</p>
+        <p><span class="label">Data e horário do atendimento:</span> ${escapeHtml(formatDateTime(getComplaintDateTime(complaint)))}</p>
+        <p><span class="label">Classificação da denúncia:</span> ${escapeHtml(complaint.classification || "Não informada")}</p>
+        <p><span class="label">Gravidade:</span> ${escapeHtml(severityLabel(complaint.severity))}</p>
+        <p><span class="label">Situação final:</span> ${escapeHtml(complaint.finalStatus || DEFAULT_FINAL_STATUS)}</p>
         <p><span class="label">Registrado por:</span> ${escapeHtml(complaintAuthor(complaint))}</p>
       </section>
       <p class="report">${escapeHtml(narrative)}</p>
+      ${complaint.actionsTaken ? `<section class="identification"><p><span class="label">Providências adotadas:</span> ${escapeHtml(complaint.actionsTaken)}</p></section>` : ""}
       <section class="signatures">
         <div class="signature">Assinatura do(a) Fiscal</div>
         <div class="signature">Assinatura do(a) Responsável</div>
@@ -752,13 +863,19 @@ function openComplaintDetail(id) {
   $("#modalContent").innerHTML = `
     <div class="detail-grid">
       <div class="detail-card"><span>Escola</span><strong>${escapeHtml(complaint.schoolName)}</strong></div>
-      <div class="detail-card"><span>Data e horário</span><strong>${formatDateTime(complaint.createdAt)}</strong></div>
-      <div class="detail-card"><span>Classificação</span><strong>${severityBadge(complaint.severity)}</strong></div>
+      <div class="detail-card"><span>Data e horário</span><strong>${formatDateTime(getComplaintDateTime(complaint))}</strong></div>
+      <div class="detail-card"><span>Classificação da denúncia</span><strong>${escapeHtml(complaint.classification || "Não informada")}</strong></div>
+      <div class="detail-card"><span>Gravidade</span><strong>${severityBadge(complaint.severity)}</strong></div>
+      <div class="detail-card"><span>Situação final</span><strong>${escapeHtml(complaint.finalStatus || DEFAULT_FINAL_STATUS)}</strong></div>
       <div class="detail-card"><span>Registrado por</span><strong>${escapeHtml(complaintAuthor(complaint))}</strong></div>
     </div>
     <div class="report-box">
       <h3>Relato do ocorrido</h3>
       <p>${escapeHtml(complaint.report)}</p>
+    </div>
+    <div class="report-box">
+      <h3>Providências adotadas</h3>
+      <p>${escapeHtml(complaint.actionsTaken || "Não informadas.")}</p>
     </div>
   `;
   $("#detailModal").classList.remove("hidden");
@@ -789,12 +906,15 @@ function exportCsv() {
     return;
   }
 
-  const header = ["Número", "Data e horário", "Escola", "Gravidade", "Registrado por", "Relato"];
+  const header = ["Número", "Data do atendimento", "Escola", "Classificação da denúncia", "Gravidade", "Situação final", "Providências adotadas", "Registrado por", "Relato"];
   const rows = complaints.map((item) => [
     item.number,
-    formatDateTime(item.createdAt),
+    formatDateTime(getComplaintDateTime(item)),
     item.schoolName,
+    item.classification || "",
     item.severity,
+    item.finalStatus || DEFAULT_FINAL_STATUS,
+    item.actionsTaken || "",
     complaintAuthor(item),
     item.report
   ]);
@@ -835,8 +955,23 @@ function severityBadge(severity) {
   return `<span class="severity-badge ${className}">${label}</span>`;
 }
 
+function severityLabel(severity) {
+  if (severity === "Média" || severity === "MÃ©dia") return "Média gravidade";
+  if (severity === "Baixa") return "Baixa gravidade";
+  return "Grave";
+}
+
 function complaintAuthor(complaint) {
   return complaint.createdByEmail || complaint.createdByName || "Não identificado";
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+function normalizeStatus(value = "") {
+  return normalize(value).trim();
 }
 
 function formatDateTime(value) {
@@ -847,6 +982,16 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function toDateInputValue(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function toTimeInputValue(value) {
+  const date = new Date(value);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function normalize(value = "") {

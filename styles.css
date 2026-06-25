@@ -519,6 +519,38 @@ button {
   text-align: right;
 }
 
+.distribution-chart {
+  display: grid;
+  min-height: 170px;
+  align-content: center;
+  gap: 14px;
+}
+
+.distribution-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1.5fr) 35px;
+  align-items: center;
+  gap: 10px;
+}
+
+.distribution-row .label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.distribution-row .bar-track {
+  height: 10px;
+}
+
+.distribution-row .value {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
 .empty-slot:empty::after {
   content: "Os indicadores aparecerão após o primeiro registro.";
   display: grid;
@@ -858,6 +890,16 @@ textarea:focus {
   font-size: 10px;
 }
 
+.form-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.form-grid.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .severity-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -935,7 +977,7 @@ textarea:focus {
 
 .filter-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(160px, 0.5fr) minmax(180px, 0.7fr);
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(150px, 0.55fr));
   gap: 10px;
   margin-bottom: 15px;
   padding: 15px;
@@ -1260,6 +1302,7 @@ textarea:focus {
   }
 
   .severity-options,
+  .form-grid.two-columns,
   .school-layout,
   .filter-panel {
     grid-template-columns: 1fr;

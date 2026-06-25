@@ -119,6 +119,22 @@
               <small id="statEscolasTotal">de 0 credenciadas</small>
             </div>
           </article>
+          <article class="stat-card">
+            <span class="stat-icon amber">⌛</span>
+            <div>
+              <span class="stat-label">Em análise</span>
+              <strong id="statAnalise">0</strong>
+              <small>Situação final pendente</small>
+            </div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon teal">✓</span>
+            <div>
+              <span class="stat-label">Finalizadas</span>
+              <strong id="statFinalizadas">0</strong>
+              <small>Resolvidas, arquivadas ou concluídas</small>
+            </div>
+          </article>
         </div>
 
         <div class="dashboard-grid">
@@ -144,6 +160,28 @@
           </article>
         </div>
 
+        <div class="dashboard-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">DISTRIBUIÇÃO</p>
+                <h3>Por classificação da denúncia</h3>
+              </div>
+            </div>
+            <div id="classificationChart" class="distribution-chart empty-slot"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">ACOMPANHAMENTO</p>
+                <h3>Por situação final</h3>
+              </div>
+            </div>
+            <div id="statusChart" class="distribution-chart empty-slot"></div>
+          </article>
+        </div>
+
         <article class="panel">
           <div class="panel-header">
             <div>
@@ -159,7 +197,9 @@
                   <th>Número</th>
                   <th>Data e horário</th>
                   <th>Escola</th>
+                  <th>Classificação</th>
                   <th>Gravidade</th>
+                  <th>Situação</th>
                   <th>Registrado por</th>
                   <th></th>
                 </tr>
@@ -175,7 +215,7 @@
           <div>
             <p class="eyebrow">NOVO REGISTRO</p>
             <h2>Registrar denúncia</h2>
-            <p>Preencha os dados recebidos. A data, o horário e o número serão gerados automaticamente.</p>
+            <p>Preencha os dados recebidos. A data e o horário vêm preenchidos, mas podem ser ajustados para registros antigos.</p>
           </div>
           <div class="auto-number">
             <span>Próximo número</span>
@@ -196,6 +236,30 @@
                 </select>
               </label>
               <div class="form-hint">Não encontrou? Cadastre a escola na opção “Escolas” do menu.</div>
+              <div class="form-grid two-columns">
+                <label class="field">
+                  <span>Data do atendimento <b>*</b></span>
+                  <input type="date" id="attendanceDate" required>
+                </label>
+                <label class="field">
+                  <span>Hora do atendimento <b>*</b></span>
+                  <input type="time" id="attendanceTime" required>
+                </label>
+              </div>
+              <label class="field">
+                <span>Classificação da denúncia <b>*</b></span>
+                <input type="text" id="classificationInput" list="classificationOptions" maxlength="120" required placeholder="Ex.: Maus-tratos, estrutura, alimentação, higiene...">
+              </label>
+              <datalist id="classificationOptions">
+                <option value="Maus-tratos"></option>
+                <option value="Negligência no atendimento"></option>
+                <option value="Estrutura física"></option>
+                <option value="Alimentação"></option>
+                <option value="Higiene"></option>
+                <option value="Segurança"></option>
+                <option value="Gestão/administrativo"></option>
+                <option value="Outros"></option>
+              </datalist>
             </div>
           </div>
 
@@ -249,6 +313,31 @@
             </div>
           </div>
 
+          <div class="form-section">
+            <div class="form-section-number">4</div>
+            <div class="form-section-content">
+              <h3>Encaminhamento e situação final</h3>
+              <p>Informe a situação do registro e as providências adotadas, quando houver.</p>
+              <label class="field">
+                <span>Situação final</span>
+                <input type="text" id="finalStatusInput" list="finalStatusOptions" maxlength="120" placeholder="Em análise">
+              </label>
+              <datalist id="finalStatusOptions">
+                <option value="Em análise"></option>
+                <option value="Em acompanhamento"></option>
+                <option value="Encaminhada"></option>
+                <option value="Resolvida"></option>
+                <option value="Procedente"></option>
+                <option value="Improcedente"></option>
+                <option value="Arquivada"></option>
+              </datalist>
+              <label class="field">
+                <span>Providências adotadas</span>
+                <textarea id="actionsTakenText" rows="4" maxlength="3000" placeholder="Descreva os encaminhamentos, contatos realizados, orientações, visitas ou demais providências..."></textarea>
+              </label>
+            </div>
+          </div>
+
           <div class="form-actions">
             <button type="button" class="button button-secondary" id="clearFormBtn">Limpar formulário</button>
             <button type="submit" class="button button-primary" id="complaintSubmitBtn">Registrar denúncia</button>
@@ -277,6 +366,12 @@
             <option value="Média">Média gravidade</option>
             <option value="Baixa">Baixa gravidade</option>
           </select>
+          <select id="classificationFilter" aria-label="Filtrar por classificação">
+            <option value="">Todas as classificações</option>
+          </select>
+          <select id="statusFilter" aria-label="Filtrar por situação final">
+            <option value="">Todas as situações</option>
+          </select>
           <select id="schoolFilter" aria-label="Filtrar por escola">
             <option value="">Todas as escolas</option>
           </select>
@@ -291,7 +386,9 @@
                   <th>Número</th>
                   <th>Data e horário</th>
                   <th>Escola</th>
+                  <th>Classificação</th>
                   <th>Gravidade</th>
+                  <th>Situação</th>
                   <th>Registrado por</th>
                   <th></th>
                 </tr>
