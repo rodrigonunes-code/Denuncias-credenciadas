@@ -984,13 +984,26 @@ textarea:focus {
 
 .filter-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(150px, 0.55fr));
+  grid-template-columns: minmax(220px, 1.4fr) repeat(6, minmax(140px, 0.55fr)) auto;
   gap: 10px;
   margin-bottom: 15px;
   padding: 15px;
   border: 1px solid var(--line);
   border-radius: 11px;
   background: white;
+}
+
+.dashboard-filter-panel {
+  grid-template-columns: repeat(2, minmax(180px, 220px)) auto;
+  align-items: end;
+}
+
+.compact-filter-field {
+  gap: 4px;
+}
+
+.compact-filter-field > span {
+  font-size: 10px;
 }
 
 .search-field {

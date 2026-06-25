@@ -215,6 +215,12 @@ function bindEvents() {
   $("#classificationFilter").addEventListener("change", renderComplaintsList);
   $("#statusFilter").addEventListener("change", renderComplaintsList);
   $("#schoolFilter").addEventListener("change", renderComplaintsList);
+  $("#listStartDate").addEventListener("change", renderComplaintsList);
+  $("#listEndDate").addEventListener("change", renderComplaintsList);
+  $("#clearListDateFilterBtn").addEventListener("click", clearListDateFilter);
+  $("#dashboardStartDate").addEventListener("change", renderDashboard);
+  $("#dashboardEndDate").addEventListener("change", renderDashboard);
+  $("#clearDashboardDateFilterBtn").addEventListener("click", clearDashboardDateFilter);
   $("#importSpreadsheetBtn").addEventListener("click", () => $("#importSpreadsheetInput").click());
   $("#importSpreadsheetInput").addEventListener("change", importSpreadsheet);
   $("#exportCsvBtn").addEventListener("click", exportCsv);
@@ -336,6 +342,42 @@ function getAttendanceAtFromForm() {
 
 function getComplaintDateTime(complaint) {
   return complaint.attendanceAt || complaint.createdAt;
+}
+
+function getDateRange(startSelector, endSelector) {
+  const startValue = $(startSelector)?.value || "";
+  const endValue = $(endSelector)?.value || "";
+  return {
+    start: startValue ? new Date(`${startValue}T00:00:00`) : null,
+    end: endValue ? new Date(`${endValue}T23:59:59`) : null
+  };
+}
+
+function isComplaintWithinDateRange(complaint, range) {
+  const date = new Date(getComplaintDateTime(complaint));
+  if (range.start && date < range.start) return false;
+  if (range.end && date > range.end) return false;
+  return true;
+}
+
+function getDashboardComplaints() {
+  return complaints.filter((item) => isComplaintWithinDateRange(item, getDateRange("#dashboardStartDate", "#dashboardEndDate")));
+}
+
+function isDashboardDateFiltered() {
+  return Boolean($("#dashboardStartDate")?.value || $("#dashboardEndDate")?.value);
+}
+
+function clearDashboardDateFilter() {
+  $("#dashboardStartDate").value = "";
+  $("#dashboardEndDate").value = "";
+  renderDashboard();
+}
+
+function clearListDateFilter() {
+  $("#listStartDate").value = "";
+  $("#listEndDate").value = "";
+  renderComplaintsList();
 }
 
 async function submitComplaint(event) {
@@ -553,39 +595,40 @@ function renderSchools() {
 }
 
 function renderDashboard() {
+  const dashboardComplaints = getDashboardComplaints();
   const now = new Date();
-  const currentMonth = complaints.filter((item) => {
+  const currentMonth = dashboardComplaints.filter((item) => {
     const date = new Date(getComplaintDateTime(item));
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
   }).length;
-  const graves = complaints.filter((item) => item.severity === "Grave").length;
-  const inAnalysis = complaints.filter((item) => normalizeStatus(item.finalStatus) === normalizeStatus(DEFAULT_FINAL_STATUS)).length;
-  const finished = complaints.filter((item) => isFinalizedStatus(item.finalStatus)).length;
+  const graves = dashboardComplaints.filter((item) => item.severity === "Grave").length;
+  const inAnalysis = dashboardComplaints.filter((item) => normalizeStatus(item.finalStatus) === normalizeStatus(DEFAULT_FINAL_STATUS)).length;
+  const finished = dashboardComplaints.filter((item) => isFinalizedStatus(item.finalStatus)).length;
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const recent = complaints.filter((item) => new Date(getComplaintDateTime(item)) >= thirtyDaysAgo).length;
-  const schoolsWithComplaints = new Set(complaints.map((item) => item.schoolId)).size;
+  const recent = dashboardComplaints.filter((item) => new Date(getComplaintDateTime(item)) >= thirtyDaysAgo).length;
+  const schoolsWithComplaints = new Set(dashboardComplaints.map((item) => item.schoolId)).size;
 
-  $("#statTotal").textContent = complaints.length;
-  $("#statMonth").textContent = `${currentMonth} neste mês`;
+  $("#statTotal").textContent = dashboardComplaints.length;
+  $("#statMonth").textContent = isDashboardDateFiltered() ? `${dashboardComplaints.length} no período` : `${currentMonth} neste mês`;
   $("#statGraves").textContent = graves;
-  $("#statGravesPercent").textContent = `${complaints.length ? Math.round((graves / complaints.length) * 100) : 0}% do total`;
+  $("#statGravesPercent").textContent = `${dashboardComplaints.length ? Math.round((graves / dashboardComplaints.length) * 100) : 0}% do total`;
   $("#statRecentes").textContent = recent;
   $("#statEscolas").textContent = schoolsWithComplaints;
   $("#statEscolasTotal").textContent = `de ${schools.length} credenciadas`;
   $("#statAnalise").textContent = inAnalysis;
   $("#statFinalizadas").textContent = finished;
 
-  renderSchoolRanking();
-  renderSeverityChart();
-  renderClassificationChart();
-  renderStatusChart();
-  renderRecentTable();
+  renderSchoolRanking(dashboardComplaints);
+  renderSeverityChart(dashboardComplaints);
+  renderClassificationChart(dashboardComplaints);
+  renderStatusChart(dashboardComplaints);
+  renderRecentTable(dashboardComplaints);
 }
 
-function renderSchoolRanking() {
+function renderSchoolRanking(source = complaints) {
   const totals = new Map();
-  complaints.forEach((item) => totals.set(item.schoolName, (totals.get(item.schoolName) || 0) + 1));
+  source.forEach((item) => totals.set(item.schoolName, (totals.get(item.schoolName) || 0) + 1));
   const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const max = ranking[0]?.[1] || 1;
 
@@ -599,21 +642,21 @@ function renderSchoolRanking() {
   `).join("");
 }
 
-function renderSeverityChart() {
+function renderSeverityChart(source = complaints) {
   const severities = [
     { name: "Grave", className: "high" },
     { name: "Média", className: "medium" },
     { name: "Baixa", className: "low" }
   ];
-  const max = Math.max(1, ...severities.map((item) => complaints.filter((c) => c.severity === item.name).length));
+  const max = Math.max(1, ...severities.map((item) => source.filter((c) => c.severity === item.name).length));
 
-  if (!complaints.length) {
+  if (!source.length) {
     $("#severityChart").innerHTML = "";
     return;
   }
 
   $("#severityChart").innerHTML = severities.map((item) => {
-    const total = complaints.filter((complaint) => complaint.severity === item.name).length;
+    const total = source.filter((complaint) => complaint.severity === item.name).length;
     return `
       <div class="severity-row ${item.className}">
         <span class="label">${item.name}</span>
@@ -624,18 +667,18 @@ function renderSeverityChart() {
   }).join("");
 }
 
-function renderClassificationChart() {
-  renderDistributionChart("#classificationChart", complaints.map((item) => item.classification || "Não informada"));
+function renderClassificationChart(source = complaints) {
+  renderDistributionChart("#classificationChart", source.map((item) => item.classification || "Não informada"), source.length);
 }
 
-function renderStatusChart() {
-  renderDistributionChart("#statusChart", complaints.map((item) => item.finalStatus || DEFAULT_FINAL_STATUS));
+function renderStatusChart(source = complaints) {
+  renderDistributionChart("#statusChart", source.map((item) => item.finalStatus || DEFAULT_FINAL_STATUS), source.length);
 }
 
-function renderDistributionChart(selector, values) {
+function renderDistributionChart(selector, values, totalSource = complaints.length) {
   const element = $(selector);
   if (!element) return;
-  if (!complaints.length) {
+  if (!totalSource) {
     element.innerHTML = "";
     return;
   }
@@ -657,8 +700,8 @@ function renderDistributionChart(selector, values) {
   `).join("");
 }
 
-function renderRecentTable() {
-  const rows = complaints.slice(0, 5);
+function renderRecentTable(source = complaints) {
+  const rows = source.slice(0, 5);
   $("#recentTable").innerHTML = rows.length ? rows.map(complaintRow).join("") : emptyTableRow(8);
   bindDetailButtons();
 }
@@ -669,6 +712,7 @@ function renderComplaintsList() {
   const classification = $("#classificationFilter").value;
   const finalStatus = $("#statusFilter").value;
   const schoolId = $("#schoolFilter").value;
+  const dateRange = getDateRange("#listStartDate", "#listEndDate");
 
   const filtered = complaints.filter((item) => {
     const matchesSearch = !search || normalize(`${item.number} ${item.schoolName} ${item.classification || ""} ${item.finalStatus || ""} ${item.actionsTaken || ""} ${item.report}`).includes(search);
@@ -676,7 +720,8 @@ function renderComplaintsList() {
     const matchesClassification = !classification || item.classification === classification;
     const matchesStatus = !finalStatus || item.finalStatus === finalStatus;
     const matchesSchool = !schoolId || item.schoolId === schoolId;
-    return matchesSearch && matchesSeverity && matchesClassification && matchesStatus && matchesSchool;
+    const matchesDate = isComplaintWithinDateRange(item, dateRange);
+    return matchesSearch && matchesSeverity && matchesClassification && matchesStatus && matchesSchool && matchesDate;
   });
 
   $("#resultCount").textContent = filtered.length;
