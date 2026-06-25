@@ -435,8 +435,8 @@ button {
 
 .ranking-list {
   display: grid;
-  gap: 17px;
-  min-height: 170px;
+  gap: 13px;
+  min-height: 360px;
 }
 
 .ranking-item {
@@ -484,6 +484,19 @@ button {
   color: var(--muted);
   font-size: 11px;
   text-align: right;
+}
+
+.zero-complaints-pill {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: var(--green);
+  background: var(--green-light);
+  font-size: 10px;
+  font-weight: 850;
 }
 
 .severity-chart {

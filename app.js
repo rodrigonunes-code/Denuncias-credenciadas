@@ -621,6 +621,7 @@ function renderDashboard() {
   $("#statFinalizadas").textContent = finished;
 
   renderSchoolRanking(dashboardComplaints);
+  renderBestSchoolRanking(dashboardComplaints);
   renderSeverityChart(dashboardComplaints);
   renderClassificationChart(dashboardComplaints);
   renderStatusChart(dashboardComplaints);
@@ -630,7 +631,7 @@ function renderDashboard() {
 function renderSchoolRanking(source = complaints) {
   const totals = new Map();
   source.forEach((item) => totals.set(item.schoolName, (totals.get(item.schoolName) || 0) + 1));
-  const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const ranking = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   const max = ranking[0]?.[1] || 1;
 
   $("#schoolRanking").innerHTML = ranking.map(([name, total], index) => `
@@ -639,6 +640,30 @@ function renderSchoolRanking(source = complaints) {
       <span class="ranking-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
       ${svgBar(total, max)}
       <span class="ranking-total">${total} ${total === 1 ? "reg." : "regs."}</span>
+    </div>
+  `).join("");
+}
+
+function renderBestSchoolRanking(source = complaints) {
+  const totals = new Map();
+  schools.forEach((school) => totals.set(school.id, { name: school.name, total: 0 }));
+  source.forEach((item) => {
+    const current = totals.get(item.schoolId) || { name: item.schoolName, total: 0 };
+    current.total += 1;
+    totals.set(item.schoolId, current);
+  });
+
+  const ranking = [...totals.values()]
+    .sort((a, b) => a.total - b.total || a.name.localeCompare(b.name, "pt-BR"))
+    .slice(0, 10);
+  const max = Math.max(1, ...ranking.map((item) => item.total));
+
+  $("#bestSchoolRanking").innerHTML = ranking.map((item, index) => `
+    <div class="ranking-item best-ranking-item">
+      <span class="rank-number">${index + 1}</span>
+      <span class="ranking-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+      ${item.total ? svgBar(item.total, max) : `<span class="zero-complaints-pill">Sem denúncias</span>`}
+      <span class="ranking-total">${item.total} ${item.total === 1 ? "reg." : "regs."}</span>
     </div>
   `).join("");
 }
