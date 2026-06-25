@@ -637,7 +637,7 @@ function renderSchoolRanking(source = complaints) {
     <div class="ranking-item">
       <span class="rank-number">${index + 1}</span>
       <span class="ranking-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
-      <div class="bar-track"><div class="bar-fill" style="width:${(total / max) * 100}%"></div></div>
+      ${svgBar(total, max)}
       <span class="ranking-total">${total} ${total === 1 ? "reg." : "regs."}</span>
     </div>
   `).join("");
@@ -799,7 +799,11 @@ function printDashboardReport() {
     <title>Relatório do Dashboard</title>
     <style>
       @page { size: A4 portrait; margin: 14mm 12mm; }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
       body {
         margin: 0;
         color: #172b36;
@@ -913,16 +917,10 @@ function printDashboardReport() {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .bar-track {
-        height: 7pt;
-        overflow: hidden;
-        border-radius: 999px;
-        background: #e8eef0;
-      }
-      .bar-fill {
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, #0f766e, #46aa9b);
+      .bar-svg {
+        display: block;
+        width: 100%;
+        height: 8pt;
       }
       .bar-value {
         color: #637883;
@@ -1057,6 +1055,16 @@ function barList(items) {
       <span class="bar-value">${total}</span>
     </div>
   `).join("");
+}
+
+function svgBar(total, max) {
+  const width = Math.max(3, Math.round((total / max) * 100));
+  return `
+    <svg class="bar-svg" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+      <rect x="0" y="0" width="100" height="8" rx="4" fill="#e8eef0"></rect>
+      <rect x="0" y="0" width="${width}" height="8" rx="4" fill="#0f766e"></rect>
+    </svg>
+  `;
 }
 
 function countBy(source, getLabel) {
