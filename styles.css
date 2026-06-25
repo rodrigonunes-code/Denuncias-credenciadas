@@ -994,7 +994,7 @@ textarea:focus {
 }
 
 .dashboard-filter-panel {
-  grid-template-columns: repeat(2, minmax(180px, 220px)) auto;
+  grid-template-columns: repeat(2, minmax(180px, 220px)) auto auto;
   align-items: end;
 }
 

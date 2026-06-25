@@ -221,6 +221,7 @@ function bindEvents() {
   $("#dashboardStartDate").addEventListener("change", renderDashboard);
   $("#dashboardEndDate").addEventListener("change", renderDashboard);
   $("#clearDashboardDateFilterBtn").addEventListener("click", clearDashboardDateFilter);
+  $("#printDashboardBtn").addEventListener("click", printDashboardReport);
   $("#importSpreadsheetBtn").addEventListener("click", () => $("#importSpreadsheetInput").click());
   $("#importSpreadsheetInput").addEventListener("change", importSpreadsheet);
   $("#exportCsvBtn").addEventListener("click", exportCsv);
@@ -761,6 +762,319 @@ function bindDetailButtons() {
   $$("[data-print-id]").forEach((button) => {
     button.addEventListener("click", () => printComplaint(button.dataset.printId));
   });
+}
+
+function printDashboardReport() {
+  const source = getDashboardComplaints();
+  if (!source.length) {
+    showToast("Não há denúncias no período selecionado para imprimir.", true);
+    return;
+  }
+
+  const total = source.length;
+  const graves = source.filter((item) => item.severity === "Grave").length;
+  const medias = source.filter((item) => item.severity === "Média" || item.severity === "MÃ©dia").length;
+  const baixas = source.filter((item) => item.severity === "Baixa").length;
+  const finalizadas = source.filter((item) => isFinalizedStatus(item.finalStatus)).length;
+  const emAnalise = source.filter((item) => normalizeStatus(item.finalStatus) === normalizeStatus(DEFAULT_FINAL_STATUS)).length;
+  const escolasComRegistros = new Set(source.map((item) => item.schoolId)).size;
+  const rankingEscolas = countBy(source, (item) => item.schoolName).slice(0, 10);
+  const rankingClassificacoes = countBy(source, (item) => item.classification || "Não informada");
+  const rankingSituacoes = countBy(source, (item) => item.finalStatus || DEFAULT_FINAL_STATUS);
+  const recentes = source.slice(0, 12);
+  const printedAt = formatDateTime(new Date().toISOString());
+  const periodLabel = dashboardPeriodLabel();
+  const printWindow = window.open("", "_blank");
+
+  if (!printWindow) {
+    showToast("Permita pop-ups no navegador para imprimir o relatório.", true);
+    return;
+  }
+
+  printWindow.document.write(`<!DOCTYPE html>
+  <html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório do Dashboard</title>
+    <style>
+      @page { size: A4 portrait; margin: 14mm 12mm; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: #172b36;
+        background: #fff;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 10pt;
+        line-height: 1.35;
+      }
+      .document { width: 100%; }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 12pt;
+        border-bottom: 2px solid #0f766e;
+      }
+      .eyebrow {
+        margin: 0 0 4pt;
+        color: #0f766e;
+        font-size: 7.5pt;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        color: #0f2633;
+        font-size: 17pt;
+      }
+      .subtitle {
+        margin: 4pt 0 0;
+        color: #5d707a;
+      }
+      .meta {
+        min-width: 150pt;
+        color: #4b606b;
+        font-size: 8.5pt;
+        text-align: right;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8pt;
+        margin: 12pt 0;
+      }
+      .card {
+        min-height: 50pt;
+        padding: 9pt;
+        border: 1px solid #d9e4e8;
+        border-radius: 8pt;
+        background: #f8fbfb;
+      }
+      .card span {
+        display: block;
+        color: #637883;
+        font-size: 7.8pt;
+        font-weight: 700;
+      }
+      .card strong {
+        display: block;
+        margin-top: 4pt;
+        color: #0f2633;
+        font-size: 18pt;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10pt;
+        margin-top: 10pt;
+      }
+      .section {
+        break-inside: avoid;
+        padding: 10pt;
+        border: 1px solid #d9e4e8;
+        border-radius: 8pt;
+      }
+      .section.full { grid-column: 1 / -1; }
+      h2 {
+        margin: 0 0 8pt;
+        color: #0f2633;
+        font-size: 11pt;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 5pt 4pt;
+        border-bottom: 1px solid #e7eef1;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: #637883;
+        background: #f4f7f8;
+        font-size: 7.5pt;
+        text-transform: uppercase;
+      }
+      .number { color: #0f766e; font-weight: 700; }
+      .bar-row {
+        display: grid;
+        grid-template-columns: minmax(90pt, 1fr) 1.4fr 24pt;
+        align-items: center;
+        gap: 6pt;
+        margin: 6pt 0;
+      }
+      .bar-label {
+        overflow: hidden;
+        font-size: 8.5pt;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bar-track {
+        height: 7pt;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e8eef0;
+      }
+      .bar-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #0f766e, #46aa9b);
+      }
+      .bar-value {
+        color: #637883;
+        font-size: 8pt;
+        text-align: right;
+      }
+      .footer {
+        margin-top: 14pt;
+        padding-top: 8pt;
+        border-top: 1px solid #d9e4e8;
+        color: #667985;
+        font-size: 7.5pt;
+        text-align: center;
+      }
+      @media screen {
+        body { background: #e9edef; }
+        .document {
+          width: 210mm;
+          min-height: 297mm;
+          margin: 18px auto;
+          padding: 14mm 12mm;
+          background: white;
+          box-shadow: 0 4px 24px rgba(0,0,0,.14);
+        }
+      }
+      @media print {
+        .document { min-height: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="document">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Unidade de Credenciamentos</p>
+          <h1>Relatório de Denúncias</h1>
+          <p class="subtitle">Resumo gerencial das ocorrências registradas no sistema.</p>
+        </div>
+        <div class="meta">
+          <strong>Período:</strong><br>${escapeHtml(periodLabel)}<br><br>
+          <strong>Emitido em:</strong><br>${escapeHtml(printedAt)}
+        </div>
+      </header>
+
+      <section class="summary">
+        ${summaryCard("Total de denúncias", total)}
+        ${summaryCard("Denúncias graves", graves, `${total ? Math.round((graves / total) * 100) : 0}% do total`)}
+        ${summaryCard("Média gravidade", medias)}
+        ${summaryCard("Baixa gravidade", baixas)}
+        ${summaryCard("Finalizadas", finalizadas)}
+        ${summaryCard("Em análise", emAnalise)}
+        ${summaryCard("Escolas com registros", escolasComRegistros, `de ${schools.length} credenciadas`)}
+      </section>
+
+      <section class="grid">
+        <div class="section">
+          <h2>Escolas com mais denúncias</h2>
+          ${barList(rankingEscolas)}
+        </div>
+        <div class="section">
+          <h2>Por gravidade</h2>
+          ${barList([["Grave", graves], ["Média", medias], ["Baixa", baixas]])}
+        </div>
+        <div class="section">
+          <h2>Por classificação da denúncia</h2>
+          ${barList(rankingClassificacoes)}
+        </div>
+        <div class="section">
+          <h2>Por situação final</h2>
+          ${barList(rankingSituacoes)}
+        </div>
+        <div class="section full">
+          <h2>Últimas denúncias do período</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Número</th>
+                <th>Data</th>
+                <th>Escola</th>
+                <th>Classificação</th>
+                <th>Gravidade</th>
+                <th>Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentes.map((item) => `
+                <tr>
+                  <td class="number">${escapeHtml(item.number)}</td>
+                  <td>${escapeHtml(formatComplaintDateTime(item))}</td>
+                  <td>${escapeHtml(item.schoolName)}</td>
+                  <td>${escapeHtml(item.classification || "Não informada")}</td>
+                  <td>${escapeHtml(severityLabel(item.severity))}</td>
+                  <td>${escapeHtml(item.finalStatus || DEFAULT_FINAL_STATUS)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="footer">Relatório emitido automaticamente pelo Sistema de Controle de Denúncias.</div>
+    </main>
+    <script>
+      window.addEventListener("load", () => {
+        window.focus();
+        setTimeout(() => window.print(), 250);
+      });
+    <\/script>
+  </body>
+  </html>`);
+  printWindow.document.close();
+}
+
+function summaryCard(label, value, detail = "") {
+  return `
+    <div class="card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${detail ? `<span>${escapeHtml(detail)}</span>` : ""}
+    </div>
+  `;
+}
+
+function barList(items) {
+  const normalized = items.filter(([, total]) => total > 0);
+  if (!normalized.length) return `<p style="color:#667985;font-size:8.5pt">Sem registros no período.</p>`;
+  const max = Math.max(...normalized.map(([, total]) => total), 1);
+  return normalized.map(([label, total]) => `
+    <div class="bar-row">
+      <span class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(total / max) * 100}%"></div></div>
+      <span class="bar-value">${total}</span>
+    </div>
+  `).join("");
+}
+
+function countBy(source, getLabel) {
+  const totals = new Map();
+  source.forEach((item) => {
+    const label = String(getLabel(item) || "Não informado").trim() || "Não informado";
+    totals.set(label, (totals.get(label) || 0) + 1);
+  });
+  return [...totals.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function dashboardPeriodLabel() {
+  const start = $("#dashboardStartDate")?.value;
+  const end = $("#dashboardEndDate")?.value;
+  if (start && end) return `${formatDateOnly(`${start}T12:00:00`)} a ${formatDateOnly(`${end}T12:00:00`)}`;
+  if (start) return `A partir de ${formatDateOnly(`${start}T12:00:00`)}`;
+  if (end) return `Até ${formatDateOnly(`${end}T12:00:00`)}`;
+  return "Todos os registros";
 }
 
 function printComplaint(id) {
