@@ -935,7 +935,8 @@ async function importSpreadsheet(event) {
     const workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
     const firstSheetName = workbook.SheetNames[0];
     const firstSheet = workbook.Sheets[firstSheetName];
-    const rows = window.XLSX.utils.sheet_to_json(firstSheet, { defval: "", raw: false });
+    const matrix = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "", raw: false });
+    const rows = buildImportRowsFromFirstSheet(matrix);
 
     if (!rows.length) {
       showToast("A primeira aba da planilha não possui denúncias para importar.", true);
@@ -985,7 +986,7 @@ function prepareImportRows(rows) {
   const pendingKeys = new Set();
 
   rows.forEach((row, index) => {
-    const line = index + 2;
+    const line = row.__line || index + 2;
     const rawDate = getImportValue(row, ["Data do Atendimento", "Data do atendimento", "Data"]);
     const rawSchool = getImportValue(row, ["Escola", "Nome da escola"]);
     const rawReport = getImportValue(row, ["Relato da Denúncia", "Relato da denúncia", "Relato"]);
@@ -1034,6 +1035,36 @@ function prepareImportRows(rows) {
   });
 
   return { validRows, problems };
+}
+
+function buildImportRowsFromFirstSheet(matrix) {
+  const knownHeaders = [
+    "Data do Atendimento",
+    "Escola",
+    "Relato da Denúncia",
+    "Classificação da Denúncia",
+    "Gravidade",
+    "Situação Final",
+    "Providências Adotadas"
+  ].map(normalizeHeader);
+
+  const headerIndex = matrix.findIndex((row) => {
+    const normalized = row.map(normalizeHeader);
+    return knownHeaders.filter((header) => normalized.includes(header)).length >= 4;
+  });
+
+  if (headerIndex < 0) {
+    throw new Error("Não encontrei a linha de cabeçalho na primeira aba. Verifique se ela contém Data do Atendimento, Escola, Relato da Denúncia, Classificação da Denúncia, Gravidade, Situação Final e Providências Adotadas.");
+  }
+
+  const headers = matrix[headerIndex].map((header) => String(header || "").trim());
+  return matrix.slice(headerIndex + 1).map((row, offset) => {
+    const item = { __line: headerIndex + offset + 2 };
+    headers.forEach((header, columnIndex) => {
+      if (header) item[header] = row[columnIndex] ?? "";
+    });
+    return item;
+  }).filter((row) => Object.entries(row).some(([key, value]) => key !== "__line" && String(value || "").trim()));
 }
 
 function getImportValue(row, candidates) {
